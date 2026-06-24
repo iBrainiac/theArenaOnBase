@@ -1,0 +1,18 @@
+{
+  "name": "agent-prediction-market-agent",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "register": "node scripts/register.js"
+  },
+  "dependencies": {
+    "openai": "^4.52.0",
+    "node-cron": "^3.0.3",
+    "ox": "^0.6.0",
+    "viem": "^2.21.0",
+    "x402-axios": "^0.3.0",
+    "axios": "^1.7.0",
+    "dotenv": "^16.4.0"
+  }
+}

@@ -1,0 +1,32 @@
+# ── Environment & Secrets ────────────────────────────
+.env
+.env.local
+
+# ── Dependencies ──────────────────────────────────────
+node_modules/
+package-lock.json
+yarn.lock
+
+# ── Build & Artifacts ────────────────────────────────
+dist/
+build/
+
+# ── Logs ──────────────────────────────────────────────
+*.log
+
+# ── Databases ─────────────────────────────────────────
+streaks.db
+*.db
+*.sqlite
+
+# ── Caches ────────────────────────────────────────────
+.cache/
+cache/
+
+# ── IDE & Editor ──────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store

@@ -1,0 +1,184 @@
+export const MARKET_ABI = [
+  {
+    name: "createMarket",
+    type: "function",
+    inputs: [
+      { name: "marketType", type: "uint8" },
+      { name: "question", type: "string" },
+      { name: "duration", type: "uint256" },
+      { name: "option", type: "uint8" },
+      { name: "amount", type: "uint256" },
+      { name: "oracleAddress", type: "address" },
+    ],
+    outputs: [{ name: "marketId", type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    name: "joinMarket",
+    type: "function",
+    inputs: [
+      { name: "marketId", type: "uint256" },
+      { name: "option", type: "uint8" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    name: "settleMarket",
+    type: "function",
+    inputs: [{ name: "marketId", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    name: "withdraw",
+    type: "function",
+    inputs: [{ name: "marketId", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    name: "refund",
+    type: "function",
+    inputs: [{ name: "marketId", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    name: "proposeOutcome",
+    type: "function",
+    inputs: [
+      { name: "marketId", type: "uint256" },
+      { name: "outcome", type: "uint8" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    name: "markets",
+    type: "function",
+    inputs: [{ name: "", type: "uint256" }],
+    outputs: [
+      { name: "id", type: "uint256" },
+      { name: "marketType", type: "uint8" },
+      { name: "question", type: "string" },
+      { name: "openPrice", type: "int256" },
+      { name: "closePrice", type: "int256" },
+      { name: "deadline", type: "uint256" },
+      { name: "createdAt", type: "uint256" },
+      { name: "totalOptionA", type: "uint256" },
+      { name: "totalOptionB", type: "uint256" },
+      { name: "totalOptionC", type: "uint256" },
+      { name: "totalPot", type: "uint256" },
+      { name: "status", type: "uint8" },
+      { name: "winningOption", type: "uint8" },
+      { name: "oracleAddress", type: "address" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    name: "marketCount",
+    type: "function",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    name: "getMarketStatus",
+    type: "function",
+    inputs: [{ name: "marketId", type: "uint256" }],
+    outputs: [{ name: "", type: "uint8" }],
+    stateMutability: "view",
+  },
+  {
+    name: "getPosition",
+    type: "function",
+    inputs: [
+      { name: "marketId", type: "uint256" },
+      { name: "participant", type: "address" },
+    ],
+    outputs: [
+      { name: "amount", type: "uint256" },
+      { name: "option", type: "uint8" },
+      { name: "withdrawn", type: "bool" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    name: "accumulatedFees",
+    type: "function",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "event",
+    name: "MarketCreated",
+    inputs: [
+      { name: "marketId", type: "uint256", indexed: true },
+      { name: "creator", type: "address", indexed: true },
+      { name: "marketType", type: "uint8", indexed: false },
+      { name: "option", type: "uint8", indexed: false },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "MarketJoined",
+    inputs: [
+      { name: "marketId", type: "uint256", indexed: true },
+      { name: "participant", type: "address", indexed: true },
+      { name: "option", type: "uint8", indexed: false },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "MarketSettled",
+    inputs: [
+      { name: "marketId", type: "uint256", indexed: true },
+      { name: "winningOption", type: "uint8", indexed: false },
+    ],
+  },
+];
+
+export const UMA_ABI = [
+  {
+    name: "settleAssertion",
+    type: "function",
+    inputs: [{ name: "assertionId", type: "bytes32" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+];
+
+export const USDC_ABI = [
+  {
+    name: "approve",
+    type: "function",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    name: "allowance",
+    type: "function",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    name: "balanceOf",
+    type: "function",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+];
