@@ -43,41 +43,6 @@ function StakeBar({ aTotal, cTotal, bTotal, winner }) {
   )
 }
 
-const OUTCOME_LABEL = { 1: 'Team A wins', 2: 'Team B wins', 3: 'Draw' }
-
-function ResolutionBanner({ market, teamA, teamB }) {
-  const hasAssertion  = !!market.assertion_id
-  const hasPending    = market.pending_result != null
-  if (!hasPending && !hasAssertion) return null
-
-  const outcomeLabel = market.pending_result === 1 ? teamA + ' wins'
-    : market.pending_result === 2 ? teamB + ' wins'
-    : market.pending_result === 3 ? 'Draw'
-    : null
-
-  if (hasAssertion) {
-    const expiresAt = Number(market.assertion_expires_at)
-    const secsLeft  = Math.max(0, expiresAt - Math.floor(Date.now() / 1000))
-    const hLeft     = Math.floor(secsLeft / 3600)
-    const mLeft     = Math.floor((secsLeft % 3600) / 60)
-    const timeLabel = secsLeft === 0 ? 'finalizing soon'
-      : hLeft > 0 ? `~${hLeft}h ${mLeft}m dispute window`
-      : `~${mLeft}m dispute window`
-    return (
-      <div className="resolution-banner disputed">
-        <span className="resolution-icon">⏳</span>
-        <span>UMA dispute window open · {timeLabel}</span>
-      </div>
-    )
-  }
-
-  return (
-    <div className="resolution-banner pending">
-      <span className="resolution-icon">✓</span>
-      <span>Result submitted: <strong>{outcomeLabel}</strong> · agent proposing via UMA</span>
-    </div>
-  )
-}
 
 export function SportsCard({ market, onJoin }) {
   const { address } = useAccount()
@@ -87,8 +52,7 @@ export function SportsCard({ market, onJoin }) {
   const isOpen    = market.status === STATUS.OPEN
   const isLive    = market.status === STATUS.LIVE
   const isSettled = market.status === STATUS.SETTLED
-  const hasPendingResult = market.pending_result != null || !!market.assertion_id
-  const canJoin   = (isOpen || isLive) && !hasPendingResult && !!address
+  const canJoin   = (isOpen || isLive) && !isSettled && !!address
 
   const aTotal = toUSDC(market.option_a_total)
   const bTotal = toUSDC(market.option_b_total)
@@ -106,10 +70,9 @@ export function SportsCard({ market, onJoin }) {
   const statusText = draw
     ? (drawBettorsWin ? 'Draw — draw bettors win' : 'Draw — refunds available')
     : isSettled ? (aWon ? `${teamA} wins` : `${teamB} wins`)
-    : hasPendingResult ? 'Resolving'
     : isLive ? 'Live' : 'Open'
 
-  const statusClass = hasPendingResult && !isSettled ? 'resolving' : isLive ? 'live' : isOpen ? 'open' : 'settled'
+  const statusClass = isLive ? 'live' : isOpen ? 'open' : 'settled'
 
   return (
     <article className="sports-card">
@@ -145,9 +108,7 @@ export function SportsCard({ market, onJoin }) {
 
       <StakeBar aTotal={aTotal} cTotal={cTotal} bTotal={bTotal} winner={winner} />
 
-      {!isSettled && <ResolutionBanner market={market} teamA={teamA} teamB={teamB} />}
-
-      {!isSettled && !hasPendingResult && (
+      {!isSettled && (
         <div className="sports-card-footer">
           <span className="sports-pot">
             Pot: <strong>{(aTotal + cTotal + bTotal).toFixed(2)} USDC</strong>
@@ -160,14 +121,6 @@ export function SportsCard({ market, onJoin }) {
           >
             {!address ? 'Connect to bet' : 'Pick a side'}
           </button>
-        </div>
-      )}
-
-      {!isSettled && hasPendingResult && (
-        <div className="sports-card-footer">
-          <span className="sports-pot">
-            Pot: <strong>{(aTotal + cTotal + bTotal).toFixed(2)} USDC</strong>
-          </span>
         </div>
       )}
     </article>

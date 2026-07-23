@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 import {
   upsertMarket, upsertPosition, updateMarketStatus,
   getPositionsForMarket, incrementStreak, resetStreak, recordHistory,
-  recordAssertion, markAssertionSettled, markWithdrawn,
+  markWithdrawn,
 } from "./db.js";
 
 const MARKET_ABI = [
@@ -11,7 +11,6 @@ const MARKET_ABI = [
   "event MarketSettled(uint256 indexed marketId, uint8 winningOption)",
   "event MarketCancelled(uint256 indexed marketId)",
   "function markets(uint256) external view returns (uint256 id, uint8 marketType, string question, int256 openPrice, int256 closePrice, uint256 deadline, uint256 createdAt, uint256 totalOptionA, uint256 totalOptionB, uint256 totalOptionC, uint256 totalPot, uint8 status, uint8 winningOption, address oracleAddress)",
-  "event OutcomeProposed(uint256 indexed marketId, bytes32 indexed assertionId, uint8 proposedOption, address proposer)",
   "event Withdrawn(uint256 indexed marketId, address indexed participant, uint256 amount)",
   "event Refunded(uint256 indexed marketId, address indexed participant, uint256 amount)",
 ];
@@ -131,18 +130,6 @@ export function startListener() {
   contract.on("Refunded", (marketId, participant) => {
     console.log(`[Event] Refunded #${marketId} by ${participant}`);
     markWithdrawn(Number(marketId), participant);
-  });
-
-  contract.on("OutcomeProposed", (marketId, assertionId, proposedOption, proposer) => {
-    console.log(`[Event] OutcomeProposed #${marketId} assertionId=${assertionId}`);
-    const UMA_LIVENESS = 7200;
-    const expiresAt = Math.floor(Date.now() / 1000) + UMA_LIVENESS;
-    recordAssertion(assertionId, Number(marketId), Number(proposedOption), proposer, expiresAt);
-  });
-
-  // When UMA resolves, the market status updates via MarketSettled — also mark assertion settled
-  contract.on("MarketSettled", (marketId, winningOption) => {
-    // Handled in the existing MarketSettled handler above; this is a no-op duplicate guard
   });
 
   console.log(`Listening for AgentMarket events at ${address}`);

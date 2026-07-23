@@ -46,16 +46,6 @@ export const MARKET_ABI = [
     stateMutability: "nonpayable",
   },
   {
-    name: "proposeOutcome",
-    type: "function",
-    inputs: [
-      { name: "marketId", type: "uint256" },
-      { name: "outcome", type: "uint8" },
-    ],
-    outputs: [],
-    stateMutability: "nonpayable",
-  },
-  {
     name: "markets",
     type: "function",
     inputs: [{ name: "", type: "uint256" }],
@@ -140,16 +130,6 @@ export const MARKET_ABI = [
       { name: "marketId", type: "uint256", indexed: true },
       { name: "winningOption", type: "uint8", indexed: false },
     ],
-  },
-];
-
-export const UMA_ABI = [
-  {
-    name: "settleAssertion",
-    type: "function",
-    inputs: [{ name: "assertionId", type: "bytes32" }],
-    outputs: [],
-    stateMutability: "nonpayable",
   },
 ];
 

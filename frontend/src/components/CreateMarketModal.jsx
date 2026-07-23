@@ -8,6 +8,7 @@ import {
 } from '../constants'
 
 const PHASES = { IDLE: 'idle', APPROVING: 'approving', CREATING: 'creating', DONE: 'done' }
+const CONTRACT_OWNER = '0x426bE45496911cBdac19750Ff4bd90cE7ecefB48'.toLowerCase()
 
 const SPORTS_DURATIONS = [
   { label: '2h',  secs: 7200  },
@@ -20,13 +21,14 @@ const SPORTS_DURATIONS = [
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 
-function TypeToggle({ value, onChange, disabled }) {
+function TypeToggle({ value, onChange, disabled, isOwner }) {
+  const tabs = [
+    { val: 'btc',    label: 'BTC Price' },
+    ...(isOwner ? [{ val: 'sports', label: 'Sports Match' }] : []),
+  ]
   return (
     <div className="type-toggle">
-      {[
-        { val: 'btc',    label: 'BTC Price' },
-        { val: 'sports', label: 'Sports Match' },
-      ].map(({ val, label }) => (
+      {tabs.map(({ val, label }) => (
         <button
           key={val}
           className={`type-tab${value === val ? ' active' : ''}`}
@@ -89,7 +91,8 @@ export function CreateMarketModal({ onClose }) {
   const [competition, setCompetition] = useState('FIFA World Cup 2026')
   const [sportsDur,   setSportsDur]   = useState(SPORTS_DURATIONS[0])
 
-  const isSports = marketType === 'sports'
+  const isOwner  = address?.toLowerCase() === CONTRACT_OWNER
+  const isSports = marketType === 'sports' && isOwner
 
   const amountRaw = (() => {
     try { return parseUnits(amount || '0', 6) } catch { return 0n }
@@ -195,7 +198,7 @@ export function CreateMarketModal({ onClose }) {
       <div className="modal modal-wide">
         <h2 className="modal-title">Create a market</h2>
 
-        <TypeToggle value={marketType} onChange={resetSportsOnTypeChange} disabled={isBusy || isDone} />
+        <TypeToggle value={marketType} onChange={resetSportsOnTypeChange} disabled={isBusy || isDone} isOwner={isOwner} />
 
         {isSports ? (
           <>

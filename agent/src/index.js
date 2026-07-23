@@ -7,7 +7,6 @@ import {
   settleMarket, withdraw, refund,
   scanMyMarketsForAction, getUSDCBalance,
 } from "./market.js";
-import { sportsProposalLoop, sportsFinalizationLoop } from "./sportsProposal.js";
 import { account } from "./wallet.js";
 import { MIN_BET_RAW, MAX_OPEN_POSITIONS, OPTION } from "./config.js";
 
@@ -94,19 +93,11 @@ async function tradingLoop() {
   }
 }
 
-async function sportsLoop() {
-  await sportsProposalLoop();
-  await sportsFinalizationLoop();
-}
-
 console.log("Agent starting...");
 await settleLoop();
 await tradingLoop();
-await sportsLoop();
 
 // BTC: settle every 5min, trade every hour
-// Sports: check for proposals + finalizations every 10min
 cron.schedule("*/5 * * * *", settleLoop);
 cron.schedule("0 * * * *", tradingLoop);
-cron.schedule("*/10 * * * *", sportsLoop);
-console.log("Agent scheduled — BTC: settle/5min trade/1h | Sports: propose+finalize/10min");
+console.log("Agent scheduled — BTC: settle/5min trade/1h");

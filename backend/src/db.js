@@ -79,18 +79,11 @@ export function upsertMarket(m) {
 
 export function getOpenMarkets() {
   return db.prepare(`
-    SELECT m.*,
-      sr.outcome        AS pending_result,
-      pa.assertion_id   AS assertion_id,
-      pa.expires_at     AS assertion_expires_at
-    FROM markets m
-    LEFT JOIN sports_results sr ON sr.market_id = m.market_id
-    LEFT JOIN pending_assertions pa
-      ON pa.market_id = m.market_id AND pa.settled = 0
+    SELECT * FROM markets
     WHERE
-      m.status = 1
-      OR (m.status = 0 AND m.deadline > strftime('%s', 'now'))
-    ORDER BY m.created_at DESC
+      status = 1
+      OR (status = 0 AND deadline > strftime('%s', 'now'))
+    ORDER BY created_at DESC
   `).all();
 }
 
@@ -201,7 +194,7 @@ export function getSportsMarketsForResolution() {
   ).all(now);
 }
 
-// ── Sports results (admin-entered, queued for agent to propose via UMA) ────────
+// ── Sports results (kept for historical data, tables still exist) ─────────────
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS sports_results (

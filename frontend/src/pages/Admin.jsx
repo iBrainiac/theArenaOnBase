@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { useAccount } from 'wagmi'
+import { useState, useEffect } from 'react'
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { parseSportsQuestion, FLAGS } from '../constants'
+import { parseSportsQuestion, FLAGS, MARKET_ADDRESS, MARKET_ABI } from '../constants'
 import { API_BASE } from '../lib/api'
 
 const CONTRACT_OWNER = '0x426bE45496911cBdac19750Ff4bd90cE7ecefB48'.toLowerCase()
@@ -22,37 +22,48 @@ function useResolveQueue() {
 function ResolveCard({ market }) {
   const queryClient = useQueryClient()
   const [busy, setBusy] = useState(null)
-  const [done, setDone] = useState(false)
   const [err,  setErr]  = useState(null)
+
+  const { writeContract, data: txHash, isPending, error: writeError } = useWriteContract()
+  const { isSuccess, isLoading: isConfirming } = useWaitForTransactionReceipt({ hash: txHash })
 
   const { teamA, teamB, competition } = parseSportsQuestion(market.question)
   const pot = toUSDC(market.total_pot)
   const deadlinePast = new Date(Number(market.deadline) * 1000)
 
-  async function submitResult(outcome) {
+  useEffect(() => {
+    if (isSuccess) {
+      queryClient.invalidateQueries({ queryKey: ['resolve-queue'] })
+      setBusy(null)
+    }
+  }, [isSuccess, queryClient])
+
+  useEffect(() => {
+    if (writeError) {
+      setErr(writeError.shortMessage || writeError.message || 'Transaction failed')
+      setBusy(null)
+    }
+  }, [writeError])
+
+  function submitResult(outcome) {
     setBusy(outcome)
     setErr(null)
-    try {
-      const res = await fetch(`${API_BASE}/api/markets/${market.market_id}/result`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ outcome }),
-      })
-      if (!res.ok) throw new Error(await res.text())
-      setDone(true)
-      queryClient.invalidateQueries({ queryKey: ['resolve-queue'] })
-    } catch (e) {
-      setErr(e.message || 'Failed to submit result')
-    }
-    setBusy(null)
+    writeContract({
+      address: MARKET_ADDRESS,
+      abi: MARKET_ABI,
+      functionName: 'resolveSportsMarket',
+      args: [BigInt(market.market_id), outcome],
+    })
   }
 
-  if (done) return (
+  const isBusy = !!busy || isPending || isConfirming
+
+  if (isSuccess) return (
     <article className="admin-card done">
       <p className="admin-done-msg">
-        Market #{market.market_id} — result queued<br />
+        Market #{market.market_id} — resolved on-chain<br />
         <span style={{ fontSize: 12, color: 'var(--text-2)' }}>
-          Agent will propose via UMA within 10 min · 2hr dispute window
+          Winners can now claim their winnings
         </span>
       </p>
     </article>
@@ -76,28 +87,28 @@ function ResolveCard({ market }) {
         <span>Ended: {deadlinePast.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
       </div>
 
-      <p className="admin-resolve-label">Set result → agent proposes via UMA</p>
+      <p className="admin-resolve-label">Set result → resolves on-chain instantly</p>
       <div className="admin-resolve-btns">
         <button
           className={`admin-btn team-a${busy === 1 ? ' loading' : ''}`}
           onClick={() => submitResult(1)}
-          disabled={!!busy}
+          disabled={isBusy}
         >
-          {busy === 1 ? '...' : `${FLAGS[teamA] || ''} ${teamA} wins`}
+          {busy === 1 && isConfirming ? 'Confirming...' : busy === 1 && isPending ? 'Sign...' : `${FLAGS[teamA] || ''} ${teamA} wins`}
         </button>
         <button
           className={`admin-btn draw${busy === 3 ? ' loading' : ''}`}
           onClick={() => submitResult(3)}
-          disabled={!!busy}
+          disabled={isBusy}
         >
-          {busy === 3 ? '...' : 'Draw'}
+          {busy === 3 && isConfirming ? 'Confirming...' : busy === 3 && isPending ? 'Sign...' : 'Draw'}
         </button>
         <button
           className={`admin-btn team-b${busy === 2 ? ' loading' : ''}`}
           onClick={() => submitResult(2)}
-          disabled={!!busy}
+          disabled={isBusy}
         >
-          {busy === 2 ? '...' : `${FLAGS[teamB] || ''} ${teamB} wins`}
+          {busy === 2 && isConfirming ? 'Confirming...' : busy === 2 && isPending ? 'Sign...' : `${FLAGS[teamB] || ''} ${teamB} wins`}
         </button>
       </div>
 
@@ -133,7 +144,7 @@ export function AdminPage() {
       <div className="admin-hero">
         <h1 className="admin-title">Admin</h1>
         <p className="admin-sub">
-          Enter match results — agent proposes on-chain via UMA, auto-settles after 2hr dispute window
+          Select the match result to resolve it on-chain instantly
         </p>
       </div>
 
