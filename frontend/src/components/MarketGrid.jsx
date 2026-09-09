@@ -26,7 +26,7 @@ export function MarketGrid() {
     <>
       <section className="section">
         <div className="section-header" style={{ marginBottom: '1rem' }}>
-          <h2 className="section-title">Open markets</h2>
+          <h2 className="section-title">Open cards</h2>
           <button
             className="btn-create"
             onClick={() => setCreating(true)}

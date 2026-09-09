@@ -130,8 +130,8 @@ export function ResultsPage() {
   return (
     <div className="page-wrap">
       <div className="results-hero">
-        <h1 className="results-title">Results</h1>
-        <p className="results-sub">Settled markets · outcomes on-chain</p>
+        <h1 className="results-title">Settled</h1>
+        <p className="results-sub">Outcomes on-chain · same pot for both corners</p>
         <div className="results-stats">
           <div className="rstat"><div className="rstat-val">{settled.length}</div><div className="rstat-label">Total</div></div>
           <div className="rstat"><div className="rstat-val">{sports.length}</div><div className="rstat-label">Matches</div></div>

@@ -1,30 +1,10 @@
-import { useState, useEffect } from 'react'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { Link, useLocation } from 'react-router-dom'
 import { useAccount } from 'wagmi'
+import { Logo } from './Logo'
+import { ThemeToggle } from './ThemeToggle'
 
 const CONTRACT_OWNER = '0x426bE45496911cBdac19750Ff4bd90cE7ecefB48'.toLowerCase()
-
-function ThemeToggle() {
-  const [theme, setTheme] = useState(
-    () => document.documentElement.getAttribute('data-theme') || 'dark'
-  )
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-    try { localStorage.setItem('arena-theme', theme) } catch (_) {}
-  }, [theme])
-
-  return (
-    <button
-      className="theme-toggle"
-      onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
-      title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-    >
-      {theme === 'dark' ? '☀' : '☾'}
-    </button>
-  )
-}
 
 export function Nav() {
   const { pathname } = useLocation()
@@ -33,13 +13,10 @@ export function Nav() {
 
   return (
     <nav className="nav">
-      <Link to="/" className="nav-logo">
-        <div className="nav-logo-mark">A</div>
-        <span className="nav-logo-name">The Arena</span>
-      </Link>
+      <Logo to="/app" />
 
       <ul className="nav-links">
-        <li><Link to="/"            className={pathname === '/'            ? 'active' : ''}>Markets</Link></li>
+        <li><Link to="/app"         className={pathname === '/app'         ? 'active' : ''}>Markets</Link></li>
         <li><Link to="/results"     className={pathname === '/results'     ? 'active' : ''}>Results</Link></li>
         <li><Link to="/leaderboard" className={pathname === '/leaderboard' ? 'active' : ''}>Leaderboard</Link></li>
         {isOwner && (

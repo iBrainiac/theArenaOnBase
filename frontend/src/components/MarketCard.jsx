@@ -68,10 +68,10 @@ export function MarketCard({ market, onJoin }) {
   }
 
   return (
-    <article className="market-card">
+    <article className="market-card ticket">
       <div className="card-top">
-        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-          <span className="market-type-pill btc">BTC ↑↓</span>
+        <div className="ticket-pills">
+          <span className="market-type-pill btc">BTC</span>
           {marketDuration && <span className="duration-pill">{marketDuration}</span>}
         </div>
         <div className={`status-indicator ${isLive ? 'live' : 'open'}`}>
