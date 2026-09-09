@@ -1,14 +1,13 @@
-import { useState } from 'react'
-import { useAccount, useWriteContract, useReadContract, usePublicClient } from 'wagmi'
+import { useEffect, useState } from 'react'
+import { useAccount, useWriteContract, useReadContract, usePublicClient, useSwitchChain } from 'wagmi'
 import { parseUnits } from 'viem'
 import { useQueryClient } from '@tanstack/react-query'
 import {
-  MARKET_ADDRESS, USDC_ADDRESS, CHAINLINK_BTC_USD,
-  MARKET_ABI, USDC_ABI, OPTION, DURATIONS, FLAGS,
+  CONTRACT_OWNER, MARKET_ABI, USDC_ABI, OPTION, DURATIONS, FLAGS,
 } from '../constants'
+import { ARC_TESTNET_ID, BASE_SEPOLIA_ID, ensureWalletChain, getChainConfig } from '../chains'
 
 const PHASES = { IDLE: 'idle', APPROVING: 'approving', CREATING: 'creating', DONE: 'done' }
-const CONTRACT_OWNER = '0x426bE45496911cBdac19750Ff4bd90cE7ecefB48'.toLowerCase()
 
 const SPORTS_DURATIONS = [
   { label: '2h',  secs: 7200  },
@@ -21,11 +20,34 @@ const SPORTS_DURATIONS = [
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 
-function TypeToggle({ value, onChange, disabled, isOwner }) {
-  const tabs = [
-    { val: 'btc',    label: 'BTC Price' },
-    ...(isOwner ? [{ val: 'sports', label: 'Sports Match' }] : []),
+function NetworkPicker({ value, onChange, disabled }) {
+  const opts = [
+    { id: BASE_SEPOLIA_ID, label: 'Base Sepolia' },
+    { id: ARC_TESTNET_ID, label: 'Arc Testnet' },
   ]
+  return (
+    <div className="type-toggle" style={{ marginTop: '0.75rem' }}>
+      {opts.map(({ id, label }) => (
+        <button
+          key={id}
+          className={`type-tab${value === id ? ' active' : ''}`}
+          onClick={() => !disabled && onChange(id)}
+          disabled={disabled}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function TypeToggle({ value, onChange, disabled, isOwner, sportsOnly }) {
+  const tabs = sportsOnly
+    ? (isOwner ? [{ val: 'sports', label: 'Sports Match' }] : [])
+    : [
+        { val: 'btc', label: 'BTC Price' },
+        ...(isOwner ? [{ val: 'sports', label: 'Sports Match' }] : []),
+      ]
   return (
     <div className="type-toggle">
       {tabs.map(({ val, label }) => (
@@ -73,12 +95,16 @@ function TeamSideSelector({ teamA, teamB, value, onChange, disabled }) {
 }
 
 export function CreateMarketModal({ onClose }) {
-  const { address }  = useAccount()
-  const publicClient = usePublicClient()
+  const { address, chainId: walletChainId } = useAccount()
+  const { switchChainAsync } = useSwitchChain()
   const queryClient  = useQueryClient()
   const { writeContractAsync } = useWriteContract()
 
-  const [marketType, setMarketType] = useState('btc')
+  const sportsOnly = Number(walletChainId) === ARC_TESTNET_ID
+  const initialSportsChain = getChainConfig(walletChainId) ? Number(walletChainId) : BASE_SEPOLIA_ID
+
+  const [marketType, setMarketType] = useState(sportsOnly ? 'sports' : 'btc')
+  const [sportsChainId, setSportsChainId] = useState(initialSportsChain)
   const [direction,  setDirection]  = useState(null)
   const [duration,   setDuration]   = useState(DURATIONS[4])
   const [amount,     setAmount]     = useState('1')
@@ -91,19 +117,31 @@ export function CreateMarketModal({ onClose }) {
   const [competition, setCompetition] = useState('FIFA World Cup 2026')
   const [sportsDur,   setSportsDur]   = useState(SPORTS_DURATIONS[0])
 
-  const isOwner  = address?.toLowerCase() === CONTRACT_OWNER
+  const isOwner  = address?.toLowerCase() === CONTRACT_OWNER.toLowerCase()
   const isSports = marketType === 'sports' && isOwner
+  const targetId = isSports ? sportsChainId : BASE_SEPOLIA_ID
+  const target   = getChainConfig(targetId)
+  const publicClient = usePublicClient({ chainId: targetId })
+
+  useEffect(() => {
+    if (sportsOnly) setMarketType('sports')
+  }, [sportsOnly])
+
+  useEffect(() => {
+    if (getChainConfig(walletChainId)) setSportsChainId(Number(walletChainId))
+  }, [walletChainId])
 
   const amountRaw = (() => {
     try { return parseUnits(amount || '0', 6) } catch { return 0n }
   })()
 
   const { data: allowance = 0n, refetch: refetchAllowance } = useReadContract({
-    address: USDC_ADDRESS,
+    address: target.usdc,
     abi: USDC_ABI,
     functionName: 'allowance',
-    args: [address, MARKET_ADDRESS],
-    query: { enabled: !!address },
+    args: [address, target.market],
+    chainId: targetId,
+    query: { enabled: !!address && !!target?.usdc && !!target?.market },
   })
 
   const validAmount = parseFloat(amount) >= 1 && amountRaw > 0n
@@ -126,12 +164,16 @@ export function CreateMarketModal({ onClose }) {
     setError(null)
 
     try {
+      if (!target) throw new Error('Unknown network')
+      await ensureWalletChain(switchChainAsync, walletChainId, targetId)
+
       if (needsApproval) {
         setPhase(PHASES.APPROVING)
         const hash = await writeContractAsync({
-          address: USDC_ADDRESS, abi: USDC_ABI,
+          address: target.usdc, abi: USDC_ABI,
           functionName: 'approve',
-          args: [MARKET_ADDRESS, amountRaw],
+          args: [target.market, amountRaw],
+          chainId: targetId,
         })
         await publicClient.waitForTransactionReceipt({ hash })
         await refetchAllowance()
@@ -153,13 +195,14 @@ export function CreateMarketModal({ onClose }) {
         question     = `BTC ${dirLabel} in ${duration.label} — ${new Date().toISOString()}`
         durationSecs = BigInt(duration.secs)
         marketTypeInt = 0
-        oracle        = CHAINLINK_BTC_USD
+        oracle        = target.btcOracle
       }
 
       const hash = await writeContractAsync({
-        address: MARKET_ADDRESS, abi: MARKET_ABI,
+        address: target.market, abi: MARKET_ABI,
         functionName: 'createMarket',
         args: [marketTypeInt, question, durationSecs, direction, amountRaw, oracle],
+        chainId: targetId,
       })
       await publicClient.waitForTransactionReceipt({ hash })
       setPhase(PHASES.DONE)
@@ -197,11 +240,23 @@ export function CreateMarketModal({ onClose }) {
     <div className="overlay" onClick={(e) => e.target === e.currentTarget && !isBusy && onClose()}>
       <div className="modal modal-wide">
         <h2 className="modal-title">Create a market</h2>
+        <p className="modal-subtitle">
+          {isSports
+            ? `Match opens on ${target?.name}. Wallet switches to that network for the stake.`
+            : 'BTC markets settle on Base Sepolia'}
+        </p>
 
-        <TypeToggle value={marketType} onChange={resetSportsOnTypeChange} disabled={isBusy || isDone} isOwner={isOwner} />
+        {sportsOnly && !isOwner ? (
+          <p className="tx-hint">Only the owner can open a sports card on Arc. Switch to Base Sepolia to create BTC markets.</p>
+        ) : (
+        <TypeToggle value={marketType} onChange={resetSportsOnTypeChange} disabled={isBusy || isDone} isOwner={isOwner} sportsOnly={sportsOnly} />
+        )}
 
-        {isSports ? (
+        {sportsOnly && !isOwner ? null : isSports ? (
           <>
+            <p className="field-label" style={{ marginTop: '1.25rem' }}>Network</p>
+            <NetworkPicker value={sportsChainId} onChange={setSportsChainId} disabled={isBusy || isDone} />
+
             <p className="field-label" style={{ marginTop: '1.25rem' }}>Teams</p>
             <div className="teams-input-row">
               <div className="team-input-wrap">
@@ -265,6 +320,8 @@ export function CreateMarketModal({ onClose }) {
           </>
         )}
 
+        {!(sportsOnly && !isOwner) && (
+        <>
         <p className="field-label">{isSports ? 'Match window' : 'Timeframe'}</p>
         <div className="duration-grid">
           {durations.map((d) => (
@@ -305,6 +362,14 @@ export function CreateMarketModal({ onClose }) {
           </button>
           <button className="btn-ghost" onClick={onClose} disabled={isBusy}>Cancel</button>
         </div>
+        </>
+        )}
+
+        {sportsOnly && !isOwner && (
+          <div className="modal-actions">
+            <button className="btn-ghost" onClick={onClose}>Close</button>
+          </div>
+        )}
 
         {hint  && <p className={`tx-hint${isDone ? ' success' : ''}`}>{hint}</p>}
         {error && <p className="tx-hint error">{error}</p>}

@@ -7,6 +7,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "../../streaks.db");
 const db = new Database(DB_PATH);
 
+const BASE_SEPOLIA_ID = 84532;
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS markets (
     market_id       INTEGER PRIMARY KEY,
@@ -53,17 +55,124 @@ db.exec(`
   );
 `);
 
-// ── Markets ───────────────────────────────────────────────────────────────────
-
-// Migration: add option_c_total for existing DBs created before the Draw update
 try { db.exec(`ALTER TABLE markets ADD COLUMN option_c_total TEXT DEFAULT '0'`); } catch (_) {}
+
+function tableHasColumn(table, column) {
+  return db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
+}
+
+function migrateChainId() {
+  if (!tableHasColumn("markets", "chain_id")) {
+    db.exec(`
+      CREATE TABLE markets_v2 (
+        chain_id        INTEGER NOT NULL,
+        market_id       INTEGER NOT NULL,
+        market_type     INTEGER,
+        question        TEXT,
+        option_a_total  TEXT DEFAULT '0',
+        option_b_total  TEXT DEFAULT '0',
+        option_c_total  TEXT DEFAULT '0',
+        total_pot       TEXT DEFAULT '0',
+        status          INTEGER DEFAULT 0,
+        winning_option  INTEGER DEFAULT 0,
+        deadline        INTEGER,
+        created_at      INTEGER,
+        oracle_address  TEXT,
+        PRIMARY KEY (chain_id, market_id)
+      );
+      INSERT INTO markets_v2 (
+        chain_id, market_id, market_type, question, option_a_total, option_b_total,
+        option_c_total, total_pot, status, winning_option, deadline, created_at, oracle_address
+      )
+      SELECT ${BASE_SEPOLIA_ID}, market_id, market_type, question, option_a_total, option_b_total,
+        COALESCE(option_c_total, '0'), total_pot, status, winning_option, deadline, created_at, oracle_address
+      FROM markets;
+      DROP TABLE markets;
+      ALTER TABLE markets_v2 RENAME TO markets;
+
+      CREATE TABLE positions_v2 (
+        chain_id         INTEGER NOT NULL,
+        market_id        INTEGER NOT NULL,
+        wallet_address   TEXT NOT NULL,
+        option           INTEGER,
+        amount           TEXT,
+        withdrawn        INTEGER DEFAULT 0,
+        participant_type TEXT DEFAULT 'human',
+        PRIMARY KEY (chain_id, market_id, wallet_address)
+      );
+      INSERT INTO positions_v2 (
+        chain_id, market_id, wallet_address, option, amount, withdrawn, participant_type
+      )
+      SELECT ${BASE_SEPOLIA_ID}, market_id, wallet_address, option, amount, withdrawn, participant_type
+      FROM positions;
+      DROP TABLE positions;
+      ALTER TABLE positions_v2 RENAME TO positions;
+    `);
+  }
+
+  if (!tableHasColumn("market_history", "chain_id")) {
+    try { db.exec(`ALTER TABLE market_history ADD COLUMN chain_id INTEGER DEFAULT ${BASE_SEPOLIA_ID}`); } catch (_) {}
+  }
+
+  if (!tableHasColumn("sports_results", "chain_id")) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS sports_results (
+        market_id   INTEGER PRIMARY KEY,
+        outcome     INTEGER,
+        recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE sports_results_v2 (
+        chain_id    INTEGER NOT NULL,
+        market_id   INTEGER NOT NULL,
+        outcome     INTEGER,
+        recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (chain_id, market_id)
+      );
+      INSERT INTO sports_results_v2 (chain_id, market_id, outcome, recorded_at)
+      SELECT ${BASE_SEPOLIA_ID}, market_id, outcome, recorded_at FROM sports_results;
+      DROP TABLE sports_results;
+      ALTER TABLE sports_results_v2 RENAME TO sports_results;
+    `);
+  }
+
+  if (!tableHasColumn("pending_assertions", "chain_id")) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS pending_assertions (
+        assertion_id    TEXT PRIMARY KEY,
+        market_id       INTEGER,
+        proposed_option INTEGER,
+        proposer        TEXT,
+        expires_at      INTEGER,
+        settled         INTEGER DEFAULT 0
+      );
+      CREATE TABLE pending_assertions_v2 (
+        assertion_id    TEXT PRIMARY KEY,
+        chain_id        INTEGER NOT NULL DEFAULT ${BASE_SEPOLIA_ID},
+        market_id       INTEGER,
+        proposed_option INTEGER,
+        proposer        TEXT,
+        expires_at      INTEGER,
+        settled         INTEGER DEFAULT 0
+      );
+      INSERT INTO pending_assertions_v2 (
+        assertion_id, chain_id, market_id, proposed_option, proposer, expires_at, settled
+      )
+      SELECT assertion_id, ${BASE_SEPOLIA_ID}, market_id, proposed_option, proposer, expires_at, settled
+      FROM pending_assertions;
+      DROP TABLE pending_assertions;
+      ALTER TABLE pending_assertions_v2 RENAME TO pending_assertions;
+    `);
+  }
+}
+
+migrateChainId();
 
 export function upsertMarket(m) {
   db.prepare(`
-    INSERT INTO markets (market_id, market_type, question, option_a_total, option_b_total,
+    INSERT INTO markets (chain_id, market_id, market_type, question, option_a_total, option_b_total,
       option_c_total, total_pot, status, winning_option, deadline, created_at, oracle_address)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(market_id) DO UPDATE SET
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(chain_id, market_id) DO UPDATE SET
       option_a_total = excluded.option_a_total,
       option_b_total = excluded.option_b_total,
       option_c_total = excluded.option_c_total,
@@ -71,13 +180,24 @@ export function upsertMarket(m) {
       status         = excluded.status,
       winning_option = excluded.winning_option
   `).run(
-    m.marketId, m.marketType, m.question,
+    m.chainId, m.marketId, m.marketType, m.question,
     m.totalOptionA.toString(), m.totalOptionB.toString(), m.totalOptionC.toString(),
     m.totalPot.toString(), m.status, m.winningOption, m.deadline, m.createdAt, m.oracleAddress
   );
 }
 
-export function getOpenMarkets() {
+export function getOpenMarkets(chainId) {
+  if (chainId) {
+    return db.prepare(`
+      SELECT * FROM markets
+      WHERE chain_id = ?
+        AND (
+          status = 1
+          OR (status = 0 AND deadline > strftime('%s', 'now'))
+        )
+      ORDER BY created_at DESC
+    `).all(chainId);
+  }
   return db.prepare(`
     SELECT * FROM markets
     WHERE
@@ -87,45 +207,54 @@ export function getOpenMarkets() {
   `).all();
 }
 
-export function getMarketById(marketId) {
+export function getMarketById(marketId, chainId) {
+  if (chainId) {
+    return db.prepare(`SELECT * FROM markets WHERE chain_id = ? AND market_id = ?`).get(chainId, marketId);
+  }
   return db.prepare(`SELECT * FROM markets WHERE market_id = ?`).get(marketId);
 }
 
-export function updateMarketStatus(marketId, status, winningOption = 0) {
+export function updateMarketStatus(chainId, marketId, status, winningOption = 0) {
   db.prepare(
-    `UPDATE markets SET status = ?, winning_option = ? WHERE market_id = ?`
-  ).run(status, winningOption, marketId);
+    `UPDATE markets SET status = ?, winning_option = ? WHERE chain_id = ? AND market_id = ?`
+  ).run(status, winningOption, chainId, marketId);
 }
 
-// ── Positions ─────────────────────────────────────────────────────────────────
-
-export function upsertPosition(marketId, wallet, option, amount, type = "human") {
+export function upsertPosition(chainId, marketId, wallet, option, amount, type = "human") {
   db.prepare(`
-    INSERT INTO positions (market_id, wallet_address, option, amount, participant_type)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(market_id, wallet_address) DO UPDATE SET
+    INSERT INTO positions (chain_id, market_id, wallet_address, option, amount, participant_type)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(chain_id, market_id, wallet_address) DO UPDATE SET
       amount = CAST(CAST(amount AS INTEGER) + ? AS TEXT)
-  `).run(marketId, wallet.toLowerCase(), option, amount.toString(), type, amount.toString());
+  `).run(chainId, marketId, wallet.toLowerCase(), option, amount.toString(), type, amount.toString());
 }
 
-export function getPositionsForMarket(marketId) {
+export function getPositionsForMarket(chainId, marketId) {
   return db.prepare(
-    `SELECT * FROM positions WHERE market_id = ?`
-  ).all(marketId);
+    `SELECT * FROM positions WHERE chain_id = ? AND market_id = ?`
+  ).all(chainId, marketId);
 }
 
-export function getPositionsByWallet(wallet) {
+export function getPositionsByWallet(wallet, chainId) {
+  if (chainId) {
+    return db.prepare(`
+      SELECT p.*, m.question, m.market_type, m.status, m.winning_option,
+             m.deadline, m.total_pot, m.option_a_total, m.option_b_total, m.option_c_total
+      FROM positions p
+      JOIN markets m ON p.chain_id = m.chain_id AND p.market_id = m.market_id
+      WHERE p.wallet_address = ? AND p.chain_id = ?
+      ORDER BY m.created_at DESC
+    `).all(wallet.toLowerCase(), chainId);
+  }
   return db.prepare(`
     SELECT p.*, m.question, m.market_type, m.status, m.winning_option,
            m.deadline, m.total_pot, m.option_a_total, m.option_b_total, m.option_c_total
     FROM positions p
-    JOIN markets m ON p.market_id = m.market_id
+    JOIN markets m ON p.chain_id = m.chain_id AND p.market_id = m.market_id
     WHERE p.wallet_address = ?
     ORDER BY m.created_at DESC
   `).all(wallet.toLowerCase());
 }
-
-// ── Streaks ───────────────────────────────────────────────────────────────────
 
 export function incrementStreak(wallet, type = "human") {
   db.prepare(`
@@ -172,21 +301,33 @@ export function getBadges(longestStreak) {
   return badges;
 }
 
-export function recordHistory(marketId, wallet, outcome, amount) {
+export function recordHistory(chainId, marketId, wallet, outcome, amount) {
   db.prepare(`
-    INSERT INTO market_history (market_id, wallet_address, outcome, amount)
-    VALUES (?, ?, ?, ?)
-  `).run(marketId, wallet.toLowerCase(), outcome, amount.toString());
+    INSERT INTO market_history (chain_id, market_id, wallet_address, outcome, amount)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(chainId, marketId, wallet.toLowerCase(), outcome, amount.toString());
 }
 
-export function getSettledMarkets(limit = 50) {
+export function getSettledMarkets(limit = 50, chainId) {
+  if (chainId) {
+    return db.prepare(
+      `SELECT * FROM markets WHERE chain_id = ? AND status = 2 ORDER BY created_at DESC LIMIT ?`
+    ).all(chainId, limit);
+  }
   return db.prepare(
     `SELECT * FROM markets WHERE status = 2 ORDER BY created_at DESC LIMIT ?`
   ).all(limit);
 }
 
-export function getSportsMarketsForResolution() {
+export function getSportsMarketsForResolution(chainId) {
   const now = Math.floor(Date.now() / 1000);
+  if (chainId) {
+    return db.prepare(
+      `SELECT * FROM markets
+       WHERE chain_id = ? AND market_type = 1 AND status = 1 AND deadline < ?
+       ORDER BY deadline ASC`
+    ).all(chainId, now);
+  }
   return db.prepare(
     `SELECT * FROM markets
      WHERE market_type = 1 AND status = 1 AND deadline < ?
@@ -194,17 +335,18 @@ export function getSportsMarketsForResolution() {
   ).all(now);
 }
 
-// ── Sports results (kept for historical data, tables still exist) ─────────────
-
 db.exec(`
   CREATE TABLE IF NOT EXISTS sports_results (
-    market_id   INTEGER PRIMARY KEY,
+    chain_id    INTEGER NOT NULL DEFAULT ${BASE_SEPOLIA_ID},
+    market_id   INTEGER NOT NULL,
     outcome     INTEGER,
-    recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (chain_id, market_id)
   );
 
   CREATE TABLE IF NOT EXISTS pending_assertions (
     assertion_id    TEXT PRIMARY KEY,
+    chain_id        INTEGER NOT NULL DEFAULT ${BASE_SEPOLIA_ID},
     market_id       INTEGER,
     proposed_option INTEGER,
     proposer        TEXT,
@@ -213,30 +355,31 @@ db.exec(`
   );
 `);
 
-export function recordSportsResult(marketId, outcome) {
+export function recordSportsResult(chainId, marketId, outcome) {
   db.prepare(
-    `INSERT OR REPLACE INTO sports_results (market_id, outcome) VALUES (?, ?)`
-  ).run(marketId, outcome);
+    `INSERT OR REPLACE INTO sports_results (chain_id, market_id, outcome) VALUES (?, ?, ?)`
+  ).run(chainId, marketId, outcome);
 }
 
 export function getPendingProposals() {
   return db.prepare(`
-    SELECT sr.market_id, sr.outcome, m.question
+    SELECT sr.chain_id, sr.market_id, sr.outcome, m.question
     FROM sports_results sr
-    JOIN markets m ON sr.market_id = m.market_id
+    JOIN markets m ON sr.chain_id = m.chain_id AND sr.market_id = m.market_id
     WHERE m.status = 1
-      AND sr.market_id NOT IN (
-        SELECT market_id FROM pending_assertions WHERE settled = 0
+      AND NOT EXISTS (
+        SELECT 1 FROM pending_assertions pa
+        WHERE pa.settled = 0 AND pa.chain_id = sr.chain_id AND pa.market_id = sr.market_id
       )
   `).all();
 }
 
-export function recordAssertion(assertionId, marketId, proposedOption, proposer, expiresAt) {
+export function recordAssertion(assertionId, chainId, marketId, proposedOption, proposer, expiresAt) {
   db.prepare(`
     INSERT OR IGNORE INTO pending_assertions
-      (assertion_id, market_id, proposed_option, proposer, expires_at)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(assertionId, marketId, proposedOption, proposer.toLowerCase(), expiresAt);
+      (assertion_id, chain_id, market_id, proposed_option, proposer, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(assertionId, chainId, marketId, proposedOption, proposer.toLowerCase(), expiresAt);
 }
 
 export function getFinalizableAssertions() {
@@ -252,10 +395,10 @@ export function markAssertionSettled(assertionId) {
   ).run(assertionId);
 }
 
-export function markWithdrawn(marketId, walletAddress) {
+export function markWithdrawn(chainId, marketId, walletAddress) {
   db.prepare(
-    `UPDATE positions SET withdrawn = 1 WHERE market_id = ? AND wallet_address = ?`
-  ).run(marketId, walletAddress.toLowerCase());
+    `UPDATE positions SET withdrawn = 1 WHERE chain_id = ? AND market_id = ? AND wallet_address = ?`
+  ).run(chainId, marketId, walletAddress.toLowerCase());
 }
 
 export default db;

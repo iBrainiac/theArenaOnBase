@@ -1,25 +1,35 @@
 import { useState, useEffect } from 'react'
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useSwitchChain } from 'wagmi'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { parseSportsQuestion, FLAGS, MARKET_ADDRESS, MARKET_ABI } from '../constants'
+import { parseSportsQuestion, FLAGS, MARKET_ABI, CONTRACT_OWNER } from '../constants'
 import { API_BASE } from '../lib/api'
+import { ARC_TESTNET_ID, BASE_SEPOLIA_ID, ensureWalletChain, getChainConfig } from '../chains'
 
-const CONTRACT_OWNER = '0x426bE45496911cBdac19750Ff4bd90cE7ecefB48'.toLowerCase()
 const toUSDC = (raw) => (Number(raw || 0) / 1_000_000).toFixed(2)
 
 function useResolveQueue() {
   return useQuery({
-    queryKey: ['resolve-queue'],
+    queryKey: ['resolve-queue', 'both'],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/markets/resolve-queue`)
-      if (!res.ok) throw new Error('Failed')
-      return res.json()
+      const urls = [BASE_SEPOLIA_ID, ARC_TESTNET_ID].map(
+        (id) => `${API_BASE}/api/markets/resolve-queue?chainId=${id}`
+      )
+      const results = await Promise.all(urls.map(async (url) => {
+        const res = await fetch(url)
+        if (!res.ok) throw new Error('Failed')
+        return res.json()
+      }))
+      return results.flat()
     },
     refetchInterval: 15_000,
   })
 }
 
 function ResolveCard({ market }) {
+  const { chainId: walletChainId } = useAccount()
+  const targetId = Number(market.chain_id) || BASE_SEPOLIA_ID
+  const target = getChainConfig(targetId)
+  const { switchChainAsync } = useSwitchChain()
   const queryClient = useQueryClient()
   const [busy, setBusy] = useState(null)
   const [err,  setErr]  = useState(null)
@@ -45,15 +55,22 @@ function ResolveCard({ market }) {
     }
   }, [writeError])
 
-  function submitResult(outcome) {
+  async function submitResult(outcome) {
     setBusy(outcome)
     setErr(null)
-    writeContract({
-      address: MARKET_ADDRESS,
-      abi: MARKET_ABI,
-      functionName: 'resolveSportsMarket',
-      args: [BigInt(market.market_id), outcome],
-    })
+    try {
+      await ensureWalletChain(switchChainAsync, walletChainId, targetId)
+      writeContract({
+        address: target.market,
+        abi: MARKET_ABI,
+        functionName: 'resolveSportsMarket',
+        args: [BigInt(market.market_id), outcome],
+        chainId: targetId,
+      })
+    } catch (e) {
+      setErr(e.shortMessage || e.message || 'Switch network and retry')
+      setBusy(null)
+    }
   }
 
   const isBusy = !!busy || isPending || isConfirming
@@ -73,7 +90,7 @@ function ResolveCard({ market }) {
     <article className="admin-card">
       <div className="admin-card-top">
         <span className="admin-market-id">Market #{market.market_id}</span>
-        <span className="admin-comp">{competition || 'World Cup 2026'}</span>
+        <span className="admin-comp">{getChainConfig(Number(market.chain_id))?.name || 'Base Sepolia'} · {competition || 'World Cup 2026'}</span>
       </div>
 
       <div className="admin-matchup">
@@ -121,7 +138,7 @@ export function AdminPage() {
   const { address, isConnected } = useAccount()
   const { data: queue = [], isLoading } = useResolveQueue()
 
-  const isOwner = isConnected && address?.toLowerCase() === CONTRACT_OWNER
+  const isOwner = isConnected && address?.toLowerCase() === CONTRACT_OWNER.toLowerCase()
 
   if (!isConnected) return (
     <div className="admin-gate">
@@ -144,7 +161,7 @@ export function AdminPage() {
       <div className="admin-hero">
         <h1 className="admin-title">Admin</h1>
         <p className="admin-sub">
-          Select the match result to resolve it on-chain instantly
+          Select the match result to resolve it on-chain instantly (Base or Arc)
         </p>
       </div>
 
@@ -163,7 +180,7 @@ export function AdminPage() {
           </div>
           <div className="admin-grid">
             {queue.map((m) => (
-              <ResolveCard key={m.market_id} market={m} />
+              <ResolveCard key={`${m.chain_id}-${m.market_id}`} market={m} />
             ))}
           </div>
         </section>

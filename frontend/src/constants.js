@@ -1,4 +1,8 @@
+export { getChainConfig, CHAINS, CONTRACT_OWNER, BASE_SEPOLIA_ID, ARC_TESTNET_ID } from './chains'
+
+/** @deprecated Use getChainConfig(chainId).market — Base Sepolia fallback */
 export const MARKET_ADDRESS    = import.meta.env.VITE_MARKET_CONTRACT  || '0x878819e7BdEF8E39D782d51870F51b7AEE137329'
+/** @deprecated Use getChainConfig(chainId).usdc */
 export const USDC_ADDRESS      = import.meta.env.VITE_USDC_ADDRESS      || '0x036CbD53842c5426634e7929541eC2318f3dCF7e'
 export const CHAINLINK_BTC_USD = '0x0FB99723Aee6f420beAD13e6bBB79b7E6F034298'
 

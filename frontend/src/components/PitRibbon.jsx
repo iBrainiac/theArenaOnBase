@@ -1,14 +1,16 @@
 import { useBtcPrice } from '../hooks/useBtcPrice'
 import { useLeaderboard } from '../hooks/useLeaderboard'
 import { useMarkets } from '../hooks/useMarkets'
+import { useArenaChain } from '../hooks/useArenaChain'
 
 const fmt = (n) =>
   n?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export function PitRibbon({ compact = false }) {
+  const { chainId, sportsOnly, name } = useArenaChain()
   const { price, isFlashing, pct } = useBtcPrice()
   const { data: leaderboard = [] } = useLeaderboard()
-  const { data: markets = [] } = useMarkets()
+  const { data: markets = [] } = useMarkets(chainId)
 
   const humanCount = leaderboard.filter((e) => e.participant_type === 'human').length
   const agentCount = leaderboard.filter((e) => e.participant_type === 'agent').length
@@ -25,12 +27,16 @@ export function PitRibbon({ compact = false }) {
       </div>
 
       <div className="pit-center">
-        <span className="pit-center-kicker">The pit · BTC / USD</span>
-        <span className={`pit-price${isFlashing ? ' flash' : ''}`}>
-          {price ? `$${fmt(price)}` : '——'}
-        </span>
+        <span className="pit-center-kicker">{sportsOnly ? `The pit · ${name}` : 'The pit · BTC / USD'}</span>
+        {sportsOnly ? (
+          <span className="pit-price">Sports</span>
+        ) : (
+          <span className={`pit-price${isFlashing ? ' flash' : ''}`}>
+            {price ? `$${fmt(price)}` : '——'}
+          </span>
+        )}
         <div className="pit-center-meta">
-          {price && pct !== 0 && (
+          {!sportsOnly && price && pct !== 0 && (
             <span className={`hero-price-change ${pct >= 0 ? 'up' : 'down'}`}>
               {pct >= 0 ? '+' : ''}{pct.toFixed(4)}%
             </span>

@@ -1,14 +1,19 @@
 import { useState } from 'react'
-import { useAccount, useWriteContract, useReadContract, usePublicClient } from 'wagmi'
+import { useAccount, useWriteContract, useReadContract, usePublicClient, useSwitchChain } from 'wagmi'
 import { parseUnits } from 'viem'
 import { useQueryClient } from '@tanstack/react-query'
-import { MARKET_ADDRESS, USDC_ADDRESS, MARKET_ABI, USDC_ABI, OPTION, MARKET_TYPE, parseSportsQuestion, FLAGS } from '../constants'
+import { MARKET_ABI, USDC_ABI, MARKET_TYPE, parseSportsQuestion, FLAGS } from '../constants'
+import { BASE_SEPOLIA_ID, ensureWalletChain, getChainConfig } from '../chains'
 
 const PHASES = { IDLE: 'idle', APPROVING: 'approving', JOINING: 'joining', DONE: 'done' }
 
 export function JoinModal({ market, onClose }) {
-  const { address }   = useAccount()
-  const publicClient  = usePublicClient()
+  const { address, chainId: walletChainId } = useAccount()
+  const isSports = market.market_type === MARKET_TYPE.SPORTS_MATCH
+  const targetId = Number(market.chain_id) || BASE_SEPOLIA_ID
+  const target = getChainConfig(targetId)
+  const { switchChainAsync } = useSwitchChain()
+  const publicClient  = usePublicClient({ chainId: targetId })
   const queryClient   = useQueryClient()
   const { writeContractAsync } = useWriteContract()
 
@@ -22,11 +27,12 @@ export function JoinModal({ market, onClose }) {
   })()
 
   const { data: allowance = 0n, refetch: refetchAllowance } = useReadContract({
-    address: USDC_ADDRESS,
+    address: target?.usdc,
     abi: USDC_ABI,
     functionName: 'allowance',
-    args: [address, MARKET_ADDRESS],
-    query: { enabled: !!address },
+    args: [address, target?.market],
+    chainId: targetId,
+    query: { enabled: !!address && !!target?.usdc && !!target?.market },
   })
 
   const validAmount   = parseFloat(amount) >= 1 && amountRaw > 0n
@@ -39,13 +45,17 @@ export function JoinModal({ market, onClose }) {
     setError(null)
 
     try {
+      if (!target) throw new Error('Unknown network for this market')
+      await ensureWalletChain(switchChainAsync, walletChainId, targetId)
+
       if (needsApproval) {
         setPhase(PHASES.APPROVING)
         const hash = await writeContractAsync({
-          address: USDC_ADDRESS,
+          address: target.usdc,
           abi: USDC_ABI,
           functionName: 'approve',
-          args: [MARKET_ADDRESS, amountRaw],
+          args: [target.market, amountRaw],
+          chainId: targetId,
         })
         await publicClient.waitForTransactionReceipt({ hash })
         await refetchAllowance()
@@ -55,10 +65,11 @@ export function JoinModal({ market, onClose }) {
 
       setPhase(PHASES.JOINING)
       const hash = await writeContractAsync({
-        address: MARKET_ADDRESS,
+        address: target.market,
         abi: MARKET_ABI,
         functionName: 'joinMarket',
         args: [BigInt(market.market_id), option, amountRaw],
+        chainId: targetId,
       })
       await publicClient.waitForTransactionReceipt({ hash })
       setPhase(PHASES.DONE)
@@ -85,7 +96,6 @@ export function JoinModal({ market, onClose }) {
     : isDone                    ? 'Position opened successfully'
     : null
 
-  const isSports = market.market_type === MARKET_TYPE.SPORTS_MATCH
   const { teamA, teamB } = isSports ? parseSportsQuestion(market.question) : {}
   const sides = isSports
     ? [

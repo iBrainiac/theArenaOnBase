@@ -26,7 +26,7 @@ export function Nav() {
 
       <div className="nav-right">
         <ThemeToggle />
-        <ConnectButton chainStatus="none" showBalance={false} label="Connect wallet" />
+        <ConnectButton chainStatus="icon" showBalance={false} label="Connect wallet" />
       </div>
     </nav>
   )

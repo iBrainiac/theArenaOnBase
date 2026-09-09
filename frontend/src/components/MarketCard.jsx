@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useAccount, useWriteContract, usePublicClient } from 'wagmi'
 import { useQueryClient } from '@tanstack/react-query'
-import { STATUS, MARKET_TYPE, MARKET_ABI, MARKET_ADDRESS, fmtDuration } from '../constants'
+import { STATUS, MARKET_TYPE, MARKET_ABI, fmtDuration } from '../constants'
+import { useArenaChain } from '../hooks/useArenaChain'
 import { SportsCard } from './SportsCard'
 
 function useCountdown(deadlineSecs) {
@@ -26,7 +27,8 @@ const toUSDC = (raw) => (Number(raw || 0) / 1_000_000).toFixed(2)
 
 export function MarketCard({ market, onJoin }) {
   const { address }    = useAccount()
-  const publicClient   = usePublicClient()
+  const { chainId, market: marketAddr } = useArenaChain()
+  const publicClient   = usePublicClient({ chainId })
   const queryClient    = useQueryClient()
   const { writeContractAsync } = useWriteContract()
   const { label: timer, urgent } = useCountdown(Number(market.deadline))
@@ -52,10 +54,11 @@ export function MarketCard({ market, onJoin }) {
     setSettleErr(null)
     try {
       const hash = await writeContractAsync({
-        address: MARKET_ADDRESS,
+        address: marketAddr,
         abi: MARKET_ABI,
         functionName: 'settleMarket',
         args: [BigInt(market.market_id)],
+        chainId,
       })
       await publicClient.waitForTransactionReceipt({ hash })
       queryClient.invalidateQueries({ queryKey: ['markets'] })

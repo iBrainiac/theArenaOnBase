@@ -5,6 +5,7 @@ import { paymentMiddleware } from "x402-express";
 import marketsRouter from "./routes/markets.js";
 import streaksRouter from "./routes/streaks.js";
 import { startListener } from "./listener.js";
+import { LISTENERS } from "./chains.js";
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -17,7 +18,9 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin || allowedOrigins.some((o) => origin.startsWith(o))) return cb(null, true)
+    if (!origin) return cb(null, true)
+    if (allowedOrigins.some((o) => origin.startsWith(o))) return cb(null, true)
+    if (/^http:\/\/localhost:\d+$/.test(origin)) return cb(null, true)
     cb(new Error(`CORS: ${origin} not allowed`))
   },
   credentials: true,
@@ -73,4 +76,6 @@ app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);
 });
 
-startListener();
+for (const listener of LISTENERS) {
+  startListener(listener);
+}

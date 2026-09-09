@@ -87,19 +87,14 @@ main { flex: 1; }
 }
 
 .nav-logo-mark {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  border-radius: 2px;
-  overflow: hidden;
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  display: block;
   flex-shrink: 0;
-  outline: 1px solid var(--border-bright);
-  outline-offset: 1px;
+  background: #fff;
+  border-radius: 4px;
 }
-
-.mark-human { background: var(--human); }
-.mark-agent { background: var(--agent); }
 
 .nav-logo-name {
   font-family: var(--font-display);

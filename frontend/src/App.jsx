@@ -7,6 +7,8 @@ import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit'
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 
 import { config } from './wagmiConfig'
+import { explorerAddress, shortAddress } from './chains'
+import { useArenaChain } from './hooks/useArenaChain'
 import { Nav } from './components/Nav'
 import { LandingPage } from './pages/Landing'
 import { MarketsPage } from './pages/Markets'
@@ -25,6 +27,7 @@ const rktTheme = darkTheme({
 
 function AppShell() {
   const { pathname } = useLocation()
+  const { chainId, name, market, supported } = useArenaChain()
   const isLanding = pathname === '/'
 
   return (
@@ -42,15 +45,17 @@ function AppShell() {
       {!isLanding && (
         <footer style={{ borderTop: '1px solid var(--border)' }}>
           <div className="footer">
-            <span className="footer-text">The Arena · Base Sepolia · No house, no edge</span>
-            <a
-              className="footer-link"
-              href="https://base-sepolia.blockscout.com/address/0x878819e7BdEF8E39D782d51870F51b7AEE137329"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              0x8788…7329 ↗
-            </a>
+            <span className="footer-text">The Arena · {supported ? name : 'Unsupported network'} · No house, no edge</span>
+            {supported && market && (
+              <a
+                className="footer-link"
+                href={explorerAddress(chainId, market)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {shortAddress(market)} ↗
+              </a>
+            )}
           </div>
         </footer>
       )}

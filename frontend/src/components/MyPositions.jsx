@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { useAccount, useWriteContract, usePublicClient } from 'wagmi'
+import { useAccount, useWriteContract, usePublicClient, useSwitchChain } from 'wagmi'
 import { useQueryClient } from '@tanstack/react-query'
 import { useMyPositions } from '../hooks/useMyPositions'
 import { useLeaderboard } from '../hooks/useLeaderboard'
 import { ShareButton } from './ShareButton'
-import { MARKET_ADDRESS, MARKET_ABI, STATUS } from '../constants'
+import { MARKET_ABI, STATUS } from '../constants'
+import { BASE_SEPOLIA_ID, ensureWalletChain, getChainConfig } from '../chains'
+import { useArenaChain } from '../hooks/useArenaChain'
 
 const STATUS_LABEL = { 0: 'Open', 1: 'Live', 2: 'Settled', 3: 'Cancelled' }
 const OPTION_LABEL = { 1: 'UP', 2: 'DOWN', 3: 'Draw' }
@@ -24,8 +26,11 @@ function useCountdown(deadlineSecs) {
 }
 
 function PositionCard({ pos, onToast }) {
-  const { address } = useAccount()
-  const publicClient = usePublicClient()
+  const { address, chainId: walletChainId } = useAccount()
+  const targetId = Number(pos.chain_id) || BASE_SEPOLIA_ID
+  const target = getChainConfig(targetId)
+  const { switchChainAsync } = useSwitchChain()
+  const publicClient = usePublicClient({ chainId: targetId })
   const queryClient = useQueryClient()
   const { writeContractAsync } = useWriteContract()
   const [busy, setBusy] = useState(false)
@@ -48,11 +53,13 @@ function PositionCard({ pos, onToast }) {
   async function handleClaim(fn) {
     setBusy(true)
     try {
+      await ensureWalletChain(switchChainAsync, walletChainId, targetId)
       const hash = await writeContractAsync({
-        address: MARKET_ADDRESS,
+        address: target.market,
         abi: MARKET_ABI,
         functionName: fn,
         args: [BigInt(pos.market_id)],
+        chainId: targetId,
       })
       await publicClient.waitForTransactionReceipt({ hash })
       setClaimed(true)  // optimistic — hides button immediately
@@ -123,7 +130,8 @@ function Toast({ msg, type, onDone }) {
 
 export function MyPositions() {
   const { address } = useAccount()
-  const { data: positions = [], isLoading } = useMyPositions(address)
+  const { chainId } = useArenaChain()
+  const { data: positions = [], isLoading } = useMyPositions(address, chainId)
   const { data: leaderboard = [] } = useLeaderboard()
   const [toasts, setToasts] = useState([])
   const prevStatuses = useRef({})
@@ -177,7 +185,7 @@ export function MyPositions() {
         </div>
         <div className="pos-grid">
           {positions.map((p) => (
-            <PositionCard key={`${p.market_id}-${p.wallet_address}`} pos={p} onToast={addToast} />
+            <PositionCard key={`${p.chain_id}-${p.market_id}-${p.wallet_address}`} pos={p} onToast={addToast} />
           ))}
         </div>
       </section>

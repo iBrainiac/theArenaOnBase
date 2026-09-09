@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSettledMarkets } from '../hooks/useSettledMarkets'
 import { useMyPositions } from '../hooks/useMyPositions'
 import { useLeaderboard } from '../hooks/useLeaderboard'
 import { useAccount } from 'wagmi'
 import { MARKET_TYPE, parseSportsQuestion, FLAGS } from '../constants'
+import { useArenaChain } from '../hooks/useArenaChain'
 
 const toUSDC  = (raw) => (Number(raw || 0) / 1_000_000).toFixed(2)
 const fmtDate = (ts) => ts
@@ -111,12 +112,17 @@ function ResultCard({ market, myPosition, streak }) {
 
 export function ResultsPage() {
   const { address } = useAccount()
-  const { data: settled = [],    isLoading }  = useSettledMarkets()
-  const { data: myPositions = [] }            = useMyPositions(address)
+  const { chainId, sportsOnly } = useArenaChain()
+  const { data: settled = [],    isLoading }  = useSettledMarkets(chainId)
+  const { data: myPositions = [] }            = useMyPositions(address, chainId)
   const { data: leaderboard = [] }            = useLeaderboard()
-  const [tab, setTab]                         = useState('all')
+  const [tab, setTab]                         = useState(sportsOnly ? 'sports' : 'all')
 
-  const posMap  = Object.fromEntries(myPositions.map((p) => [p.market_id, p]))
+  useEffect(() => {
+    setTab(sportsOnly ? 'sports' : 'all')
+  }, [sportsOnly])
+
+  const posMap  = Object.fromEntries(myPositions.map((p) => [`${p.chain_id}-${p.market_id}`, p]))
   const myStats = leaderboard.find(e => e.wallet_address?.toLowerCase() === address?.toLowerCase())
   const streak  = myStats?.streak || 0
 
@@ -135,7 +141,9 @@ export function ResultsPage() {
         <div className="results-stats">
           <div className="rstat"><div className="rstat-val">{settled.length}</div><div className="rstat-label">Total</div></div>
           <div className="rstat"><div className="rstat-val">{sports.length}</div><div className="rstat-label">Matches</div></div>
-          <div className="rstat"><div className="rstat-val">{btc.length}</div><div className="rstat-label">BTC</div></div>
+          {!sportsOnly && (
+            <div className="rstat"><div className="rstat-val">{btc.length}</div><div className="rstat-label">BTC</div></div>
+          )}
           {address && (
             <>
               <div className="rstat"><div className="rstat-val" style={{ color: 'var(--up)' }}>{myWins}</div><div className="rstat-label">My wins</div></div>
@@ -157,9 +165,13 @@ export function ResultsPage() {
         <section className="section">
           <div className="results-filter-row">
             <div className="market-tabs">
-              <button className={`market-tab${tab === 'all'    ? ' active' : ''}`} onClick={() => setTab('all')}>All · {settled.length}</button>
+              {!sportsOnly && (
+                <button className={`market-tab${tab === 'all'    ? ' active' : ''}`} onClick={() => setTab('all')}>All · {settled.length}</button>
+              )}
               <button className={`market-tab${tab === 'sports' ? ' active' : ''}`} onClick={() => setTab('sports')}>Sports · {sports.length}</button>
-              <button className={`market-tab${tab === 'btc'    ? ' active' : ''}`} onClick={() => setTab('btc')}>BTC · {btc.length}</button>
+              {!sportsOnly && (
+                <button className={`market-tab${tab === 'btc'    ? ' active' : ''}`} onClick={() => setTab('btc')}>BTC · {btc.length}</button>
+              )}
             </div>
           </div>
           {shown.length === 0 ? (
@@ -167,7 +179,7 @@ export function ResultsPage() {
           ) : (
             <div className="results-grid">
               {shown.map((m) => (
-                <ResultCard key={m.market_id} market={m} myPosition={posMap[m.market_id]} streak={streak} />
+                <ResultCard key={`${m.chain_id}-${m.market_id}`} market={m} myPosition={posMap[`${m.chain_id}-${m.market_id}`]} streak={streak} />
               ))}
             </div>
           )}

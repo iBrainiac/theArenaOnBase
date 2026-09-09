@@ -15,122 +15,146 @@ const MARKET_ABI = [
   "event Refunded(uint256 indexed marketId, address indexed participant, uint256 amount)",
 ];
 
-// Known agent wallets — add your agent addresses here
 const KNOWN_AGENTS = new Set(
   (process.env.AGENT_WALLETS || "").split(",").map((a) => a.toLowerCase().trim()).filter(Boolean)
 );
+
+const DEFAULT_POLL_MS = Number(process.env.LISTENER_POLL_MS || 8000);
 
 function participantType(addr) {
   return KNOWN_AGENTS.has(addr.toLowerCase()) ? "agent" : "human";
 }
 
-export function startListener() {
-  const rpc      = process.env.BASE_SEPOLIA_RPC || "https://sepolia.base.org";
-  const address  = process.env.AGENT_MARKET_ADDRESS;
+function toMarketRow(chainId, marketId, m) {
+  return {
+    chainId,
+    marketId: Number(marketId),
+    marketType: Number(m.marketType),
+    question: m.question,
+    totalOptionA: m.totalOptionA,
+    totalOptionB: m.totalOptionB,
+    totalOptionC: m.totalOptionC,
+    totalPot: m.totalPot,
+    status: Number(m.status),
+    winningOption: 0,
+    deadline: Number(m.deadline),
+    createdAt: Number(m.createdAt),
+    oracleAddress: m.oracleAddress,
+  };
+}
 
+async function handleCreated(contract, chainId, tag, marketId, creator, option, amount) {
+  console.log(`[${tag}] MarketCreated #${marketId} by ${creator}`);
+  const m = await contract.markets(marketId);
+  upsertMarket(toMarketRow(chainId, marketId, m));
+  upsertPosition(chainId, Number(marketId), creator, Number(option), amount, participantType(creator));
+}
+
+async function handleJoined(contract, chainId, tag, marketId, participant, option, amount) {
+  console.log(`[${tag}] MarketJoined #${marketId} by ${participant}`);
+  const m = await contract.markets(marketId);
+  upsertMarket(toMarketRow(chainId, marketId, m));
+  upsertPosition(chainId, Number(marketId), participant, Number(option), amount, participantType(participant));
+}
+
+async function handleSettled(chainId, tag, marketId, winningOption) {
+  console.log(`[${tag}] MarketSettled #${marketId} — winner option ${winningOption}`);
+  updateMarketStatus(chainId, Number(marketId), 2, Number(winningOption));
+  const positions = getPositionsForMarket(chainId, Number(marketId));
+  for (const pos of positions) {
+    if (Number(winningOption) === 3) continue;
+    const type = participantType(pos.wallet_address);
+    if (pos.option === Number(winningOption)) {
+      incrementStreak(pos.wallet_address, type);
+      recordHistory(chainId, Number(marketId), pos.wallet_address, "win", pos.amount);
+    } else {
+      resetStreak(pos.wallet_address, type);
+      recordHistory(chainId, Number(marketId), pos.wallet_address, "loss", pos.amount);
+    }
+  }
+}
+
+export function startListener({ rpc, address, chainId, name, pollMs }) {
   if (!address) {
-    console.warn("AGENT_MARKET_ADDRESS not set — listener not started");
+    console.warn(`[${name || chainId}] market address not set — listener not started`);
     return;
   }
 
   const provider = new ethers.JsonRpcProvider(rpc);
   const contract = new ethers.Contract(address, MARKET_ABI, provider);
+  const tag = name || `chain ${chainId}`;
+  const basePollMs = pollMs || DEFAULT_POLL_MS;
 
-  contract.on("MarketCreated", async (marketId, creator, marketType, option, amount) => {
-    console.log(`[Event] MarketCreated #${marketId} by ${creator}`);
-    try {
-      const m = await contract.markets(marketId);
-      upsertMarket({
-        marketId:     Number(marketId),
-        marketType:   Number(marketType),
-        question:     m.question,
-        totalOptionA: m.totalOptionA,
-        totalOptionB: m.totalOptionB,
-        totalOptionC: m.totalOptionC,
-        totalPot:     m.totalPot,
-        status:       Number(m.status),
-        winningOption: 0,
-        deadline:     Number(m.deadline),
-        createdAt:    Number(m.createdAt),
-        oracleAddress: m.oracleAddress,
-      });
-      upsertPosition(
-        Number(marketId), creator, Number(option),
-        amount, participantType(creator)
-      );
-    } catch (err) {
-      console.error("MarketCreated handler error:", err.message);
+  let fromBlock = null;
+  let ticking = false;
+  let delayMs = basePollMs;
+  let timer = null;
+
+  async function dispatch(parsed) {
+    const a = parsed.args;
+    switch (parsed.name) {
+      case "MarketCreated":
+        await handleCreated(contract, chainId, tag, a.marketId, a.creator, a.option, a.amount);
+        break;
+      case "MarketJoined":
+        await handleJoined(contract, chainId, tag, a.marketId, a.participant, a.option, a.amount);
+        break;
+      case "MarketSettled":
+        await handleSettled(chainId, tag, a.marketId, a.winningOption);
+        break;
+      case "MarketCancelled":
+        console.log(`[${tag}] MarketCancelled #${a.marketId}`);
+        updateMarketStatus(chainId, Number(a.marketId), 3);
+        break;
+      case "Withdrawn":
+        console.log(`[${tag}] Withdrawn #${a.marketId} by ${a.participant}`);
+        markWithdrawn(chainId, Number(a.marketId), a.participant);
+        break;
+      case "Refunded":
+        console.log(`[${tag}] Refunded #${a.marketId} by ${a.participant}`);
+        markWithdrawn(chainId, Number(a.marketId), a.participant);
+        break;
+      default:
+        break;
     }
-  });
+  }
 
-  contract.on("MarketJoined", async (marketId, participant, option, amount) => {
-    console.log(`[Event] MarketJoined #${marketId} by ${participant}`);
+  async function tick() {
+    if (ticking) return;
+    ticking = true;
     try {
-      const m = await contract.markets(marketId);
-      upsertMarket({
-        marketId:     Number(marketId),
-        marketType:   Number(m.marketType),
-        question:     m.question,
-        totalOptionA: m.totalOptionA,
-        totalOptionB: m.totalOptionB,
-        totalOptionC: m.totalOptionC,
-        totalPot:     m.totalPot,
-        status:       Number(m.status),
-        winningOption: 0,
-        deadline:     Number(m.deadline),
-        createdAt:    Number(m.createdAt),
-        oracleAddress: m.oracleAddress,
-      });
-      upsertPosition(
-        Number(marketId), participant, Number(option),
-        amount, participantType(participant)
-      );
-    } catch (err) {
-      console.error("MarketJoined handler error:", err.message);
-    }
-  });
-
-  contract.on("MarketSettled", async (marketId, winningOption) => {
-    console.log(`[Event] MarketSettled #${marketId} — winner option ${winningOption}`);
-    try {
-      updateMarketStatus(Number(marketId), 2 /* SETTLED */, Number(winningOption));
-
-      const positions = getPositionsForMarket(Number(marketId));
-      for (const pos of positions) {
-        const won =
-          Number(winningOption) === 3 ||            // DRAW — everyone gets refund, not a streak win
-          pos.option === Number(winningOption);
-
-        if (Number(winningOption) === 3) continue;  // DRAW — no streak change
-
-        const type = participantType(pos.wallet_address);
-        if (won) {
-          incrementStreak(pos.wallet_address, type);
-          recordHistory(Number(marketId), pos.wallet_address, "win", pos.amount);
-        } else {
-          resetStreak(pos.wallet_address, type);
-          recordHistory(Number(marketId), pos.wallet_address, "loss", pos.amount);
-        }
+      const latest = await provider.getBlockNumber();
+      if (fromBlock == null) {
+        fromBlock = latest + 1;
+        delayMs = basePollMs;
+        return;
       }
+      if (latest < fromBlock) return;
+
+      const toBlock = latest;
+      const logs = await provider.getLogs({
+        address,
+        fromBlock,
+        toBlock,
+      });
+
+      for (const log of logs) {
+        const parsed = contract.interface.parseLog(log);
+        if (parsed) await dispatch(parsed);
+      }
+
+      fromBlock = toBlock + 1;
+      delayMs = basePollMs;
     } catch (err) {
-      console.error("MarketSettled handler error:", err.message);
+      delayMs = Math.min(delayMs * 2, 60_000);
+      console.error(`[${tag}] poll error (retry ${delayMs}ms):`, err.shortMessage || err.message);
+    } finally {
+      ticking = false;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(tick, delayMs);
     }
-  });
+  }
 
-  contract.on("MarketCancelled", (marketId) => {
-    console.log(`[Event] MarketCancelled #${marketId}`);
-    updateMarketStatus(Number(marketId), 3 /* CANCELLED */);
-  });
-
-  contract.on("Withdrawn", (marketId, participant) => {
-    console.log(`[Event] Withdrawn #${marketId} by ${participant}`);
-    markWithdrawn(Number(marketId), participant);
-  });
-
-  contract.on("Refunded", (marketId, participant) => {
-    console.log(`[Event] Refunded #${marketId} by ${participant}`);
-    markWithdrawn(Number(marketId), participant);
-  });
-
-  console.log(`Listening for AgentMarket events at ${address}`);
+  tick();
+  console.log(`[${tag}] Polling AgentMarket events at ${address} every ${basePollMs}ms (1 getLogs)`);
 }

@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { API_BASE } from '../lib/api'
 
-export function useMyPositions(address) {
+export function useMyPositions(address, chainId) {
   return useQuery({
-    queryKey: ['positions', address],
+    queryKey: ['positions', address, chainId],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/markets/positions/${address}`)
+      const qs = chainId ? `?chainId=${chainId}` : ''
+      const res = await fetch(`${API_BASE}/api/markets/positions/${address}${qs}`)
       if (!res.ok) throw new Error('Failed to load positions')
       return res.json()
     },
