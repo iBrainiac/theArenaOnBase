@@ -10,6 +10,7 @@ import { ARC_TESTNET_ID, BASE_SEPOLIA_ID, ensureWalletChain, getChainConfig } fr
 const PHASES = { IDLE: 'idle', APPROVING: 'approving', CREATING: 'creating', DONE: 'done' }
 
 const SPORTS_DURATIONS = [
+  { label: '10m', secs: 600   },
   { label: '2h',  secs: 7200  },
   { label: '3h',  secs: 10800 },
   { label: '6h',  secs: 21600 },
