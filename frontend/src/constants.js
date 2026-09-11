@@ -119,6 +119,33 @@ export const MARKET_ABI = [
     stateMutability: 'nonpayable',
   },
   {
+    name: 'createSportsMarket',
+    type: 'function',
+    inputs: [
+      { name: 'question',  type: 'string'  },
+      { name: 'duration',  type: 'uint256' },
+      { name: 'option',    type: 'uint8'   },
+      { name: 'amount',    type: 'uint256' },
+      { name: 'fixtureId', type: 'uint256' },
+    ],
+    outputs: [{ name: 'marketId', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    name: 'requestSportsResult',
+    type: 'function',
+    inputs: [{ name: 'marketId', type: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    name: 'sportsFixtureId',
+    type: 'function',
+    inputs: [{ name: '', type: 'uint256' }],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
     name: 'owner',
     type: 'function',
     inputs: [],

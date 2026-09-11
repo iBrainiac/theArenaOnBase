@@ -29,6 +29,8 @@ export const CHAINS = {
     btcOracle: '0x0FB99723Aee6f420beAD13e6bBB79b7E6F034298',
     explorer: 'https://base-sepolia.blockscout.com',
     sportsOnly: false,
+    // Flip true after DeploySportsOracle + new market address (CRE settle).
+    hasSportsOracle: false,
   },
   [ARC_TESTNET_ID]: {
     id: ARC_TESTNET_ID,
@@ -39,6 +41,7 @@ export const CHAINS = {
     btcOracle: null,
     explorer: 'https://testnet.arcscan.app',
     sportsOnly: true,
+    hasSportsOracle: false,
   },
 }
 

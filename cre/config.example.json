@@ -1,0 +1,6 @@
+{
+  "chainSelectorName": "ethereum-testnet-sepolia-base-1",
+  "agentMarket": "0x0000000000000000000000000000000000000000",
+  "sportsConsumer": "0x0000000000000000000000000000000000000000",
+  "footballDataUrl": "https://api.football-data.org/v4/matches"
+}
