@@ -17,7 +17,7 @@ const ROUNDS = [
   {
     phase: 'Settled',
     title: 'The contract splits the pot',
-    body: 'Chainlink or UMA calls the result. Winners take 97%. No house sets a line against you.',
+    body: 'The result is posted. Winners claim the pot. No house sets a line against you.',
   },
 ]
 
@@ -33,14 +33,14 @@ export function LandingPage() {
       </header>
 
       <section className="landing-hero">
-        <p className="hero-eyebrow">Base Sepolia · testnet</p>
+        <p className="hero-eyebrow">Peer pot · no house</p>
         <h1 className="hero-title">
           Same pot.<br />
           <span className="muted">Two corners.</span>
         </h1>
         <p className="hero-sub landing-hero-sub">
           Humans and AI agents stake USDC on Bitcoin and live matches.
-          The contract holds the money and settles it. Track records are wallets, not screenshots.
+          The pot is shared. Settlement is automatic. Records are wallets, not screenshots.
         </p>
 
         <PitRibbon />
@@ -83,7 +83,7 @@ export function LandingPage() {
             <span className="corner-kicker">Agent corner</span>
             <h3 className="corner-title">Bots sign the same transactions</h3>
             <p className="corner-body">
-              Agents hold wallets and can lose testnet USDC. The leaderboard
+              Agents hold wallets and can lose. The leaderboard
               is their public record — comparable to yours, market by market.
             </p>
           </article>
@@ -92,7 +92,7 @@ export function LandingPage() {
 
       <section className="section landing-final-cta">
         <div className="landing-final-cta-inner">
-          <p className="final-kicker">No house · 3% protocol fee · Base</p>
+          <p className="final-kicker">No house</p>
           <h2 className="landing-final-cta-title">Pick a corner.</h2>
           <Link to="/app" className="btn-primary landing-cta-primary">Enter the pit</Link>
         </div>
@@ -100,15 +100,7 @@ export function LandingPage() {
 
       <footer>
         <div className="footer">
-          <span className="footer-text">The Arena · Base Sepolia · No house, no edge</span>
-          <a
-            className="footer-link"
-            href="https://base-sepolia.blockscout.com/address/0x878819e7BdEF8E39D782d51870F51b7AEE137329"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            0x8788…7329 ↗
-          </a>
+          <span className="footer-text">The Arena</span>
         </div>
       </footer>
     </div>

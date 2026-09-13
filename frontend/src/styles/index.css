@@ -582,7 +582,8 @@ main { flex: 1; }
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
+  padding: 0.75rem;
+  overflow-y: auto;
 }
 
 .modal {
@@ -667,6 +668,88 @@ main { flex: 1; }
 
 /* ── Modal wide variant ─────────────────────────────────────── */
 .modal-wide { max-width: 480px; }
+
+.modal-create {
+  max-width: 400px;
+  max-height: min(92vh, 640px);
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 1.05rem 0.85rem;
+}
+
+.modal-create .modal-title { font-size: 18px; margin-bottom: 2px; }
+
+.modal-create .modal-subtitle {
+  margin-bottom: 0.65rem;
+  font-size: 12px;
+}
+
+.modal-create .type-toggle { margin-top: 0; }
+
+.modal-head { flex-shrink: 0; }
+
+.modal-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0.65rem 0 0.4rem;
+  padding-right: 2px;
+}
+
+.modal-create .field-label { margin-bottom: 5px; }
+
+.modal-create .teams-input-row { margin-bottom: 0.65rem; }
+
+.modal-create .team-input-wrap { height: 38px; padding: 0 10px; }
+
+.modal-create .competition-input {
+  height: 38px;
+  margin-bottom: 0.55rem;
+  padding: 0 10px;
+}
+
+.modal-create .option-grid { margin-bottom: 0.7rem; }
+
+.modal-create .opt-btn { padding: 8px 6px; gap: 3px; }
+
+.modal-create .opt-label { font-size: 16px; }
+
+.modal-create .opt-team {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-1);
+  text-align: center;
+  line-height: 1.2;
+}
+
+.modal-create .duration-grid {
+  grid-template-columns: repeat(3, 1fr);
+  margin-bottom: 0.7rem;
+}
+
+.modal-create .amount-wrap {
+  height: 42px;
+  margin-bottom: 0.35rem;
+}
+
+.modal-create .amount-input { font-size: 17px; }
+
+.modal-create .modal-actions {
+  flex-shrink: 0;
+  padding-top: 0.35rem;
+  background: var(--surface-raised);
+}
+
+.modal-create .btn-primary { padding: 11px; font-size: 14px; }
+
+.form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.form-row-2 .field-label { margin-top: 0; }
 
 /* ── Market type toggle ─────────────────────────────────────── */
 .type-toggle {
@@ -1803,7 +1886,7 @@ main { flex: 1; }
   padding: 1.25rem 2rem;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;

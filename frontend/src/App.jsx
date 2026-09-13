@@ -7,8 +7,6 @@ import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit'
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 
 import { config } from './wagmiConfig'
-import { explorerAddress, shortAddress } from './chains'
-import { useArenaChain } from './hooks/useArenaChain'
 import { Nav } from './components/Nav'
 import { LandingPage } from './pages/Landing'
 import { MarketsPage } from './pages/Markets'
@@ -27,7 +25,6 @@ const rktTheme = darkTheme({
 
 function AppShell() {
   const { pathname } = useLocation()
-  const { chainId, name, market, supported } = useArenaChain()
   const isLanding = pathname === '/'
 
   return (
@@ -43,19 +40,9 @@ function AppShell() {
         </Routes>
       </main>
       {!isLanding && (
-        <footer style={{ borderTop: '1px solid var(--border)' }}>
+        <footer>
           <div className="footer">
-            <span className="footer-text">The Arena · {supported ? name : 'Unsupported network'} · No house, no edge</span>
-            {supported && market && (
-              <a
-                className="footer-link"
-                href={explorerAddress(chainId, market)}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {shortAddress(market)} ↗
-              </a>
-            )}
+            <span className="footer-text">The Arena</span>
           </div>
         </footer>
       )}

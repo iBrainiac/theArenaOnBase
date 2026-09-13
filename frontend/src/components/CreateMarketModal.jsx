@@ -3,51 +3,30 @@ import { useAccount, useWriteContract, useReadContract, usePublicClient, useSwit
 import { parseUnits } from 'viem'
 import { useQueryClient } from '@tanstack/react-query'
 import {
-  CONTRACT_OWNER, MARKET_ABI, USDC_ABI, OPTION, DURATIONS, FLAGS,
+  MARKET_ABI, USDC_ABI, OPTION, DURATIONS, FLAGS,
 } from '../constants'
 import { ARC_TESTNET_ID, BASE_SEPOLIA_ID, ensureWalletChain, getChainConfig } from '../chains'
+import { useFixtures } from '../hooks/useFixtures'
 
 const PHASES = { IDLE: 'idle', APPROVING: 'approving', CREATING: 'creating', DONE: 'done' }
 
 const SPORTS_DURATIONS = [
-  { label: '10m', secs: 600   },
-  { label: '2h',  secs: 7200  },
-  { label: '3h',  secs: 10800 },
-  { label: '6h',  secs: 21600 },
-  { label: '12h', secs: 43200 },
-  { label: '24h', secs: 86400 },
+  { label: '10m', secs: 600    },
+  { label: '2h',  secs: 7200   },
+  { label: '6h',  secs: 21600  },
+  { label: '12h', secs: 43200  },
+  { label: '24h', secs: 86400  },
   { label: '48h', secs: 172800 },
 ]
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 
-function NetworkPicker({ value, onChange, disabled }) {
-  const opts = [
-    { id: BASE_SEPOLIA_ID, label: 'Base Sepolia' },
-    { id: ARC_TESTNET_ID, label: 'Arc Testnet' },
-  ]
-  return (
-    <div className="type-toggle" style={{ marginTop: '0.75rem' }}>
-      {opts.map(({ id, label }) => (
-        <button
-          key={id}
-          className={`type-tab${value === id ? ' active' : ''}`}
-          onClick={() => !disabled && onChange(id)}
-          disabled={disabled}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function TypeToggle({ value, onChange, disabled, isOwner, sportsOnly }) {
+function TypeToggle({ value, onChange, disabled, sportsOnly }) {
   const tabs = sportsOnly
-    ? (isOwner ? [{ val: 'sports', label: 'Sports Match' }] : [])
+    ? [{ val: 'sports', label: 'Sports Match' }]
     : [
         { val: 'btc', label: 'BTC Price' },
-        ...(isOwner ? [{ val: 'sports', label: 'Sports Match' }] : []),
+        { val: 'sports', label: 'Sports Match' },
       ]
   return (
     <div className="type-toggle">
@@ -86,8 +65,8 @@ function TeamSideSelector({ teamA, teamB, value, onChange, disabled }) {
           onClick={() => !disabled && onChange(val)}
           disabled={disabled}
         >
-          <span className="opt-label" style={{ fontSize: 22 }}>{icon}</span>
-          <span className="opt-hint" style={{ fontSize: 11, color: 'var(--text-1)', fontFamily: 'var(--font-display)', fontWeight: 600 }}>{name}</span>
+          <span className="opt-label">{icon}</span>
+          <span className="opt-team">{name}</span>
           <span className="opt-hint">{hint}</span>
         </button>
       ))}
@@ -102,10 +81,8 @@ export function CreateMarketModal({ onClose }) {
   const { writeContractAsync } = useWriteContract()
 
   const sportsOnly = Number(walletChainId) === ARC_TESTNET_ID
-  const initialSportsChain = getChainConfig(walletChainId) ? Number(walletChainId) : BASE_SEPOLIA_ID
 
   const [marketType, setMarketType] = useState(sportsOnly ? 'sports' : 'btc')
-  const [sportsChainId, setSportsChainId] = useState(initialSportsChain)
   const [direction,  setDirection]  = useState(null)
   const [duration,   setDuration]   = useState(DURATIONS[4])
   const [amount,     setAmount]     = useState('1')
@@ -115,23 +92,24 @@ export function CreateMarketModal({ onClose }) {
   // Sports-only fields
   const [teamA,       setTeamA]       = useState('')
   const [teamB,       setTeamB]       = useState('')
-  const [competition, setCompetition] = useState('FIFA World Cup 2026')
-  const [sportsDur,   setSportsDur]   = useState(SPORTS_DURATIONS[0])
+  const [competition, setCompetition] = useState('')
+  const [sportsDur,   setSportsDur]   = useState(SPORTS_DURATIONS[1])
   const [fixtureId,   setFixtureId]   = useState('')
+  const [matchQuery,  setMatchQuery]  = useState('')
 
-  const isOwner  = address?.toLowerCase() === CONTRACT_OWNER.toLowerCase()
-  const isSports = marketType === 'sports' && isOwner
-  const targetId = isSports ? sportsChainId : BASE_SEPOLIA_ID
+  const { data: fixtureData, isLoading: fixturesLoading } = useFixtures(isSports)
+  const fixtures = fixtureData?.fixtures || []
+
+  const isSports = marketType === 'sports'
+  const targetId = isSports
+    ? (getChainConfig(walletChainId) ? Number(walletChainId) : ARC_TESTNET_ID)
+    : BASE_SEPOLIA_ID
   const target   = getChainConfig(targetId)
   const publicClient = usePublicClient({ chainId: targetId })
 
   useEffect(() => {
     if (sportsOnly) setMarketType('sports')
   }, [sportsOnly])
-
-  useEffect(() => {
-    if (getChainConfig(walletChainId)) setSportsChainId(Number(walletChainId))
-  }, [walletChainId])
 
   const amountRaw = (() => {
     try { return parseUnits(amount || '0', 6) } catch { return 0n }
@@ -162,7 +140,14 @@ export function CreateMarketModal({ onClose }) {
     setDirection(null)
     setError(null)
     if (type === 'btc')    setDuration(DURATIONS[4])
-    if (type === 'sports') setSportsDur(SPORTS_DURATIONS[0])
+    if (type === 'sports') {
+      setSportsDur(SPORTS_DURATIONS[1])
+      setTeamA('')
+      setTeamB('')
+      setCompetition('')
+      setFixtureId('')
+      setMatchQuery('')
+    }
   }
 
   async function handleSubmit() {
@@ -192,9 +177,8 @@ export function CreateMarketModal({ onClose }) {
       let question, durationSecs
       let hash
       if (isSports) {
-        const comp = competition.trim() || 'FIFA World Cup 2026'
-        const fdSuffix = validFixture ? ` | fd:${fixtureNum}` : ''
-        question = `${teamA.trim()} vs ${teamB.trim()} | ${comp}${fdSuffix}`
+        const comp = competition.trim() || 'Match'
+        question = `${teamA.trim()} vs ${teamB.trim()} | ${comp}`
         durationSecs = BigInt(sportsDur.secs)
         if (target.hasSportsOracle) {
           hash = await writeContractAsync({
@@ -256,26 +240,21 @@ export function CreateMarketModal({ onClose }) {
 
   return (
     <div className="overlay" onClick={(e) => e.target === e.currentTarget && !isBusy && onClose()}>
-      <div className="modal modal-wide">
-        <h2 className="modal-title">Create a market</h2>
-        <p className="modal-subtitle">
-          {isSports
-            ? `Match opens on ${target?.name}. Wallet switches to that network for the stake.`
-            : 'BTC markets settle on Base Sepolia'}
-        </p>
+      <div className="modal modal-wide modal-create">
+        <div className="modal-head">
+          <h2 className="modal-title">Create a market</h2>
+          <p className="modal-subtitle">
+            {isSports
+              ? 'Open a match. Your stake starts the pot.'
+              : 'Open a Bitcoin market. Your stake starts the pot.'}
+          </p>
+          <TypeToggle value={marketType} onChange={resetSportsOnTypeChange} disabled={isBusy || isDone} sportsOnly={sportsOnly} />
+        </div>
 
-        {sportsOnly && !isOwner ? (
-          <p className="tx-hint">Only the owner can open a sports card on Arc. Switch to Base Sepolia to create BTC markets.</p>
-        ) : (
-        <TypeToggle value={marketType} onChange={resetSportsOnTypeChange} disabled={isBusy || isDone} isOwner={isOwner} sportsOnly={sportsOnly} />
-        )}
-
-        {sportsOnly && !isOwner ? null : isSports ? (
+        <div className="modal-scroll">
+        {isSports ? (
           <>
-            <p className="field-label" style={{ marginTop: '1.25rem' }}>Network</p>
-            <NetworkPicker value={sportsChainId} onChange={setSportsChainId} disabled={isBusy || isDone} />
-
-            <p className="field-label" style={{ marginTop: '1.25rem' }}>Teams</p>
+            <p className="field-label">Teams</p>
             <div className="teams-input-row">
               <div className="team-input-wrap">
                 <span className="team-input-flag">{FLAGS[teamA.trim()] || '🏳'}</span>
@@ -300,26 +279,29 @@ export function CreateMarketModal({ onClose }) {
               </div>
             </div>
 
-            <p className="field-label">Competition</p>
-            <input
-              className="competition-input"
-              placeholder="FIFA World Cup 2026"
-              value={competition}
-              onChange={(e) => setCompetition(e.target.value)}
-              disabled={isBusy || isDone}
-            />
-
-            <p className="field-label">football-data.org fixture id</p>
-            <input
-              className="competition-input"
-              placeholder="e.g. 327863"
-              value={fixtureId}
-              onChange={(e) => setFixtureId(e.target.value.replace(/\D/g, ''))}
-              disabled={isBusy || isDone}
-            />
-            <p className="tx-hint">
-              Required for Chainlink settle. Team A must be the home side of this fixture.
-            </p>
+            <div className="form-row-2">
+              <div>
+                <p className="field-label">Competition</p>
+                <input
+                  className="competition-input"
+                  placeholder="League or cup"
+                  value={competition}
+                  onChange={(e) => setCompetition(e.target.value)}
+                  disabled={isBusy || isDone}
+                />
+              </div>
+              <div>
+                <p className="field-label">Fixture id</p>
+                <input
+                  className="competition-input"
+                  placeholder="327863"
+                  value={fixtureId}
+                  onChange={(e) => setFixtureId(e.target.value.replace(/\D/g, ''))}
+                  disabled={isBusy || isDone}
+                />
+              </div>
+            </div>
+            <p className="tx-hint">Team A must be the home side.</p>
 
             <p className="field-label">Your pick</p>
             <TeamSideSelector
@@ -330,7 +312,7 @@ export function CreateMarketModal({ onClose }) {
           </>
         ) : (
           <>
-            <p className="field-label" style={{ marginTop: '1.25rem' }}>Direction</p>
+            <p className="field-label">Direction</p>
             <div className="option-grid">
               {[
                 { val: OPTION.UP,   cls: 'up',   label: 'UP',   hint: 'price rises' },
@@ -350,8 +332,6 @@ export function CreateMarketModal({ onClose }) {
           </>
         )}
 
-        {!(sportsOnly && !isOwner) && (
-        <>
         <p className="field-label">{isSports ? 'Match window' : 'Timeframe'}</p>
         <div className="duration-grid">
           {durations.map((d) => (
@@ -381,6 +361,7 @@ export function CreateMarketModal({ onClose }) {
           />
           <span className="amount-unit">USDC</span>
         </div>
+        </div>
 
         <div className="modal-actions">
           <button
@@ -391,18 +372,9 @@ export function CreateMarketModal({ onClose }) {
             {btnLabel}
           </button>
           <button className="btn-ghost" onClick={onClose} disabled={isBusy}>Cancel</button>
+          {hint  && <p className={`tx-hint${isDone ? ' success' : ''}`}>{hint}</p>}
+          {error && <p className="tx-hint error">{error}</p>}
         </div>
-        </>
-        )}
-
-        {sportsOnly && !isOwner && (
-          <div className="modal-actions">
-            <button className="btn-ghost" onClick={onClose}>Close</button>
-          </div>
-        )}
-
-        {hint  && <p className={`tx-hint${isDone ? ' success' : ''}`}>{hint}</p>}
-        {error && <p className="tx-hint error">{error}</p>}
       </div>
     </div>
   )

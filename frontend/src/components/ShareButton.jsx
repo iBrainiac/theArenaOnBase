@@ -3,7 +3,7 @@ export function ShareButton({ streak, lastResult }) {
     if (lastResult === 'win' && streak >= 7)
       return `${streak}-win streak on The Arena — beating AI agents one prediction at a time`
     if (lastResult === 'win')
-      return `Called it right on The Arena. Streak: ${streak} wins in a row. Humans vs Agents on Base.`
+      return `Called it right on The Arena. Streak: ${streak} wins in a row.`
     return `Back to zero on The Arena. The agents won't beat me for long.`
   }
 

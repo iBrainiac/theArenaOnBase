@@ -108,7 +108,7 @@ function ResolveCard({ market }) {
     <article className="admin-card">
       <div className="admin-card-top">
         <span className="admin-market-id">Market #{market.market_id}</span>
-        <span className="admin-comp">{getChainConfig(Number(market.chain_id))?.name || 'Base Sepolia'} · {competition || 'World Cup 2026'}</span>
+        <span className="admin-comp">{competition || 'Match'}</span>
       </div>
 
       <div className="admin-matchup">
@@ -196,7 +196,7 @@ export function AdminPage() {
       <div className="admin-hero">
         <h1 className="admin-title">Admin</h1>
         <p className="admin-sub">
-          Select the match result to resolve it on-chain instantly (Base or Arc)
+          Set the official full-time result. Winners can claim after it confirms.
         </p>
       </div>
 

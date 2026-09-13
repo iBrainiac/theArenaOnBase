@@ -4,9 +4,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useMyPositions } from '../hooks/useMyPositions'
 import { useLeaderboard } from '../hooks/useLeaderboard'
 import { ShareButton } from './ShareButton'
-import { MARKET_ABI, STATUS } from '../constants'
+import { MARKET_ABI, STATUS, MARKET_TYPE, parseSportsQuestion } from '../constants'
 import { BASE_SEPOLIA_ID, ensureWalletChain, getChainConfig } from '../chains'
-import { useArenaChain } from '../hooks/useArenaChain'
 
 const STATUS_LABEL = { 0: 'Open', 1: 'Live', 2: 'Settled', 3: 'Cancelled' }
 const OPTION_LABEL = { 1: 'UP', 2: 'DOWN', 3: 'Draw' }
@@ -37,16 +36,27 @@ function PositionCard({ pos, onToast }) {
   const [claimed, setClaimed] = useState(false)
   const timer = useCountdown(Number(pos.deadline))
 
-  const isSettled   = pos.status === STATUS.SETTLED
-  const isCancelled = pos.status === STATUS.CANCELLED
-  const isDraw      = isSettled && pos.winning_option === 3
-  const isWinner    = isSettled && !isDraw && pos.option === pos.winning_option
-  const isLoser     = isSettled && !isDraw && pos.option !== pos.winning_option
+  const isSettled   = Number(pos.status) === STATUS.SETTLED
+  const isCancelled = Number(pos.status) === STATUS.CANCELLED
+  const isSports    = Number(pos.market_type) === MARKET_TYPE.SPORTS_MATCH
+  const myOpt       = Number(pos.option)
+  const winOpt      = Number(pos.winning_option)
+  const drawPool    = Number(pos.option_c_total || 0) > 0
+  const isDrawResult = isSettled && winOpt === 3
+  const isWinner    = isSettled && (
+    (winOpt !== 3 && myOpt === winOpt) ||
+    (winOpt === 3 && isSports && drawPool && myOpt === 3) ||
+    (winOpt === 3 && (!isSports || !drawPool))
+  )
+  const isLoser     = isSettled && !isWinner && !(isDrawResult && !drawPool)
   const withdrawn   = pos.withdrawn || claimed
   const canWithdraw = isWinner && !withdrawn
-  const canRefund   = (isCancelled || pos.status === STATUS.OPEN) && !withdrawn
+  const canRefund   = (isCancelled || Number(pos.status) === STATUS.OPEN) && !withdrawn
 
-  const optionLabel = OPTION_LABEL[pos.option] || '?'
+  const sportsNames = isSports ? parseSportsQuestion(pos.question) : null
+  const optionLabel = isSports
+    ? (myOpt === 1 ? (sportsNames.teamA || 'Team A') : myOpt === 2 ? (sportsNames.teamB || 'Team B') : 'Draw')
+    : (OPTION_LABEL[myOpt] || '?')
   const potUSDC     = toUSDC(pos.total_pot)
   const myUSDC      = toUSDC(pos.amount)
 
@@ -102,7 +112,7 @@ function PositionCard({ pos, onToast }) {
 
       {canWithdraw && (
         <button className="btn-claim" onClick={() => handleClaim('withdraw')} disabled={busy}>
-          {busy ? 'Claiming...' : `Claim ${toUSDC(Math.floor(Number(pos.total_pot) * 0.97))} USDC`}
+          {busy ? 'Claiming...' : 'Claim winnings'}
         </button>
       )}
       {canRefund && (
@@ -130,8 +140,7 @@ function Toast({ msg, type, onDone }) {
 
 export function MyPositions() {
   const { address } = useAccount()
-  const { chainId } = useArenaChain()
-  const { data: positions = [], isLoading } = useMyPositions(address, chainId)
+  const { data: positions = [], isLoading } = useMyPositions(address)
   const { data: leaderboard = [] } = useLeaderboard()
   const [toasts, setToasts] = useState([])
   const prevStatuses = useRef({})

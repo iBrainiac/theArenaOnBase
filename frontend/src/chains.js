@@ -8,7 +8,7 @@ export const CONTRACT_OWNER = '0x426bE45496911cBdac19750Ff4bd90cE7ecefB48'
 
 export const arcTestnet = defineChain({
   id: ARC_TESTNET_ID,
-  name: 'Arc Testnet',
+  name: 'Sports',
   nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
   rpcUrls: {
     default: { http: ['https://rpc.testnet.arc.io'] },
@@ -22,8 +22,8 @@ export const arcTestnet = defineChain({
 export const CHAINS = {
   [BASE_SEPOLIA_ID]: {
     id: BASE_SEPOLIA_ID,
-    name: 'Base Sepolia',
-    viem: baseSepolia,
+    name: 'Bitcoin',
+    viem: { ...baseSepolia, name: 'Bitcoin' },
     market: '0x20FB4e706365FeF2Dd22Ddcd15987E695F6f637E',
     usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
     btcOracle: '0x0FB99723Aee6f420beAD13e6bBB79b7E6F034298',
@@ -33,7 +33,7 @@ export const CHAINS = {
   },
   [ARC_TESTNET_ID]: {
     id: ARC_TESTNET_ID,
-    name: 'Arc Testnet',
+    name: 'Sports',
     viem: arcTestnet,
     market: '0x4394Ab4e118A6d0cd5dA87a2a80eD090c965bb0F',
     usdc: '0x3600000000000000000000000000000000000000',

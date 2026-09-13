@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useAccount } from 'wagmi'
 import { useMarkets } from '../hooks/useMarkets'
-import { useArenaChain } from '../hooks/useArenaChain'
+import { useSettledMarkets } from '../hooks/useSettledMarkets'
 import { MarketCard } from './MarketCard'
 import { JoinModal } from './JoinModal'
 import { CreateMarketModal } from './CreateMarketModal'
@@ -9,20 +9,19 @@ import { MARKET_TYPE } from '../constants'
 
 export function MarketGrid() {
   const { address } = useAccount()
-  const { chainId, sportsOnly } = useArenaChain()
-  const { data: markets = [], isLoading, error } = useMarkets(chainId)
+  const { data: markets = [], isLoading, error } = useMarkets()
+  const { data: settled = [] } = useSettledMarkets()
   const [joining,  setJoining]  = useState(null)
   const [creating, setCreating] = useState(false)
-  const [tab,      setTab]      = useState(sportsOnly ? 'sports' : 'all')
+  const [tab,      setTab]      = useState('all')
 
-  useEffect(() => {
-    setTab(sportsOnly ? 'sports' : 'all')
-  }, [sportsOnly])
+  const settledSports = settled.filter(m => m.market_type === MARKET_TYPE.SPORTS_MATCH)
+  const listed = tab === 'sports' ? [...markets, ...settledSports] : markets
 
   const btcCount    = markets.filter(m => m.market_type !== MARKET_TYPE.SPORTS_MATCH).length
-  const sportsCount = markets.filter(m => m.market_type === MARKET_TYPE.SPORTS_MATCH).length
+  const sportsCount = listed.filter(m => m.market_type === MARKET_TYPE.SPORTS_MATCH).length
 
-  const filtered = markets.filter(m => {
+  const filtered = listed.filter(m => {
     if (tab === 'btc')    return m.market_type !== MARKET_TYPE.SPORTS_MATCH
     if (tab === 'sports') return m.market_type === MARKET_TYPE.SPORTS_MATCH
     return true
@@ -45,16 +44,12 @@ export function MarketGrid() {
 
         <div className="market-filter-row">
           <div className="market-tabs">
-            {!sportsOnly && (
-              <>
-                <button className={`market-tab${tab === 'all'    ? ' active' : ''}`} onClick={() => setTab('all')}>
-                  All {markets.length > 0 && `· ${markets.length}`}
-                </button>
-                <button className={`market-tab${tab === 'btc'    ? ' active' : ''}`} onClick={() => setTab('btc')}>
-                  BTC {btcCount > 0 && `· ${btcCount}`}
-                </button>
-              </>
-            )}
+            <button className={`market-tab${tab === 'all'    ? ' active' : ''}`} onClick={() => setTab('all')}>
+              All {markets.length > 0 && `· ${markets.length}`}
+            </button>
+            <button className={`market-tab${tab === 'btc'    ? ' active' : ''}`} onClick={() => setTab('btc')}>
+              BTC {btcCount > 0 && `· ${btcCount}`}
+            </button>
             <button className={`market-tab${tab === 'sports' ? ' active' : ''}`} onClick={() => setTab('sports')}>
               Sports {sportsCount > 0 && `· ${sportsCount}`}
             </button>

@@ -3,7 +3,7 @@ import { API_BASE } from '../lib/api'
 
 export function useMarkets(chainId) {
   return useQuery({
-    queryKey: ['markets', chainId],
+    queryKey: ['markets', chainId ?? 'all'],
     queryFn: async () => {
       const qs = chainId ? `?chainId=${chainId}` : ''
       const res = await fetch(`${API_BASE}/api/markets${qs}`)

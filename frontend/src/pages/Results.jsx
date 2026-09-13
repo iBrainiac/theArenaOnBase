@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useSettledMarkets } from '../hooks/useSettledMarkets'
 import { useMyPositions } from '../hooks/useMyPositions'
 import { useLeaderboard } from '../hooks/useLeaderboard'
 import { useAccount } from 'wagmi'
 import { MARKET_TYPE, parseSportsQuestion, FLAGS } from '../constants'
-import { useArenaChain } from '../hooks/useArenaChain'
+import { ClaimWinnings } from '../components/ClaimWinnings'
 
 const toUSDC  = (raw) => (Number(raw || 0) / 1_000_000).toFixed(2)
 const fmtDate = (ts) => ts
@@ -16,13 +16,13 @@ function shareWin({ isSports, teamA, teamB, competition, question, winner, myAmo
   if (isSports) {
     const outcome = winner === 3 ? 'Draw' : winner === 1 ? `${teamA} wins` : `${teamB} wins`
     text = streak >= 3
-      ? `${streak}-win streak on The Arena! Called ${outcome} — ${competition || 'World Cup 2026'} on Base.`
-      : `Called it on The Arena! ${outcome} — ${competition || 'World Cup 2026'}. Won ${myAmount} USDC on Base.`
+      ? `${streak}-win streak on The Arena! Called ${outcome} — ${competition || 'the match'}.`
+      : `Called it on The Arena! ${outcome} — ${competition || 'the match'}. Won ${myAmount} USDC.`
   } else {
     const dir = winner === 1 ? 'UP' : 'DOWN'
     text = streak >= 3
       ? `${streak}-win streak on The Arena! BTC went ${dir} just like I predicted. Humans > Agents.`
-      : `Called BTC ${dir} on The Arena and won ${myAmount} USDC. Humans vs AI agents on Base.`
+      : `Called Bitcoin ${dir} on The Arena and won ${myAmount} USDC.`
   }
   window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank')
 }
@@ -41,11 +41,14 @@ function ResultCard({ market, myPosition, streak }) {
   const aWon = winner === 1
   const bWon = winner === 2
 
-  const myOpt    = myPosition?.option
+  const myOpt    = myPosition != null ? Number(myPosition.option) : null
   const myAmount = myPosition ? (Number(myPosition.amount) / 1_000_000).toFixed(2) : null
-  const iWon     = !!myOpt && myOpt === winner
-  const iDraw    = !!myOpt && isDraw
-  const iLost    = !!myOpt && !iWon && !iDraw
+  const iWon     = myOpt != null && myOpt === Number(winner)
+  const iDraw    = myOpt != null && isDraw && myOpt === 3
+  const iLost    = myOpt != null && !iWon && !isDraw
+  const canClaim = !!myPosition && !myPosition.withdrawn && (
+    iWon || (isDraw && (Number(market.option_c_total || 0) === 0 || myOpt === 3))
+  )
 
   return (
     <article className={`result-card${iWon ? ' result-win' : iLost ? ' result-loss' : ''}`}>
@@ -96,6 +99,9 @@ function ResultCard({ market, myPosition, streak }) {
                iLost ? `-${myAmount} USDC` : ''}
             </span>
           )}
+          {canClaim && (
+            <ClaimWinnings chainId={market.chain_id} marketId={market.market_id} />
+          )}
           {iWon && (
             <button
               className="result-share-btn"
@@ -112,15 +118,10 @@ function ResultCard({ market, myPosition, streak }) {
 
 export function ResultsPage() {
   const { address } = useAccount()
-  const { chainId, sportsOnly } = useArenaChain()
-  const { data: settled = [],    isLoading }  = useSettledMarkets(chainId)
-  const { data: myPositions = [] }            = useMyPositions(address, chainId)
+  const { data: settled = [],    isLoading }  = useSettledMarkets()
+  const { data: myPositions = [] }            = useMyPositions(address)
   const { data: leaderboard = [] }            = useLeaderboard()
-  const [tab, setTab]                         = useState(sportsOnly ? 'sports' : 'all')
-
-  useEffect(() => {
-    setTab(sportsOnly ? 'sports' : 'all')
-  }, [sportsOnly])
+  const [tab, setTab]                         = useState('all')
 
   const posMap  = Object.fromEntries(myPositions.map((p) => [`${p.chain_id}-${p.market_id}`, p]))
   const myStats = leaderboard.find(e => e.wallet_address?.toLowerCase() === address?.toLowerCase())
@@ -137,13 +138,11 @@ export function ResultsPage() {
     <div className="page-wrap">
       <div className="results-hero">
         <h1 className="results-title">Settled</h1>
-        <p className="results-sub">Outcomes on-chain · same pot for both corners</p>
+        <p className="results-sub">Same pot. Winners claim.</p>
         <div className="results-stats">
           <div className="rstat"><div className="rstat-val">{settled.length}</div><div className="rstat-label">Total</div></div>
           <div className="rstat"><div className="rstat-val">{sports.length}</div><div className="rstat-label">Matches</div></div>
-          {!sportsOnly && (
-            <div className="rstat"><div className="rstat-val">{btc.length}</div><div className="rstat-label">BTC</div></div>
-          )}
+          <div className="rstat"><div className="rstat-val">{btc.length}</div><div className="rstat-label">BTC</div></div>
           {address && (
             <>
               <div className="rstat"><div className="rstat-val" style={{ color: 'var(--up)' }}>{myWins}</div><div className="rstat-label">My wins</div></div>
@@ -165,13 +164,9 @@ export function ResultsPage() {
         <section className="section">
           <div className="results-filter-row">
             <div className="market-tabs">
-              {!sportsOnly && (
-                <button className={`market-tab${tab === 'all'    ? ' active' : ''}`} onClick={() => setTab('all')}>All · {settled.length}</button>
-              )}
+              <button className={`market-tab${tab === 'all'    ? ' active' : ''}`} onClick={() => setTab('all')}>All · {settled.length}</button>
               <button className={`market-tab${tab === 'sports' ? ' active' : ''}`} onClick={() => setTab('sports')}>Sports · {sports.length}</button>
-              {!sportsOnly && (
-                <button className={`market-tab${tab === 'btc'    ? ' active' : ''}`} onClick={() => setTab('btc')}>BTC · {btc.length}</button>
-              )}
+              <button className={`market-tab${tab === 'btc'    ? ' active' : ''}`} onClick={() => setTab('btc')}>BTC · {btc.length}</button>
             </div>
           </div>
           {shown.length === 0 ? (

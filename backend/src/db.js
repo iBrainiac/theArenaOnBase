@@ -173,12 +173,17 @@ export function upsertMarket(m) {
       option_c_total, total_pot, status, winning_option, deadline, created_at, oracle_address)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(chain_id, market_id) DO UPDATE SET
+      market_type    = excluded.market_type,
+      question       = excluded.question,
       option_a_total = excluded.option_a_total,
       option_b_total = excluded.option_b_total,
       option_c_total = excluded.option_c_total,
       total_pot      = excluded.total_pot,
       status         = excluded.status,
-      winning_option = excluded.winning_option
+      winning_option = excluded.winning_option,
+      deadline       = excluded.deadline,
+      created_at     = excluded.created_at,
+      oracle_address = excluded.oracle_address
   `).run(
     m.chainId, m.marketId, m.marketType, m.question,
     m.totalOptionA.toString(), m.totalOptionB.toString(), m.totalOptionC.toString(),
@@ -186,23 +191,31 @@ export function upsertMarket(m) {
   );
 }
 
+export function pruneMarketsNotIn(chainId, keepIds) {
+  if (!keepIds.length) {
+    db.prepare(`DELETE FROM markets WHERE chain_id = ?`).run(chainId);
+    return;
+  }
+  const placeholders = keepIds.map(() => "?").join(",");
+  db.prepare(
+    `DELETE FROM markets WHERE chain_id = ? AND market_id NOT IN (${placeholders})`
+  ).run(chainId, ...keepIds);
+}
+
 export function getOpenMarkets(chainId) {
+  // OPEN + LIVE stay visible after the clock runs out so a second wallet can
+  // still find the card. Join is blocked in the UI / contract after deadline.
   if (chainId) {
     return db.prepare(`
       SELECT * FROM markets
       WHERE chain_id = ?
-        AND (
-          status = 1
-          OR (status = 0 AND deadline > strftime('%s', 'now'))
-        )
+        AND status IN (0, 1)
       ORDER BY created_at DESC
     `).all(chainId);
   }
   return db.prepare(`
     SELECT * FROM markets
-    WHERE
-      status = 1
-      OR (status = 0 AND deadline > strftime('%s', 'now'))
+    WHERE status IN (0, 1)
     ORDER BY created_at DESC
   `).all();
 }
@@ -227,6 +240,20 @@ export function upsertPosition(chainId, marketId, wallet, option, amount, type =
     ON CONFLICT(chain_id, market_id, wallet_address) DO UPDATE SET
       amount = CAST(CAST(amount AS INTEGER) + ? AS TEXT)
   `).run(chainId, marketId, wallet.toLowerCase(), option, amount.toString(), type, amount.toString());
+}
+
+/** Absolute position write (on-chain sync). Does not add to amount. */
+export function replacePosition(chainId, marketId, wallet, option, amount, type = "human", withdrawn = false) {
+  db.prepare(`
+    INSERT INTO positions (chain_id, market_id, wallet_address, option, amount, participant_type, withdrawn)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(chain_id, market_id, wallet_address) DO UPDATE SET
+      option   = excluded.option,
+      amount   = excluded.amount,
+      withdrawn = excluded.withdrawn
+  `).run(
+    chainId, marketId, wallet.toLowerCase(), option, amount.toString(), type, withdrawn ? 1 : 0
+  );
 }
 
 export function getPositionsForMarket(chainId, marketId) {
