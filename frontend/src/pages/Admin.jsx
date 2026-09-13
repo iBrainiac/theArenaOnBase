@@ -55,6 +55,24 @@ function ResolveCard({ market }) {
     }
   }, [writeError])
 
+  async function requestChainlink() {
+    setBusy('cl')
+    setErr(null)
+    try {
+      await ensureWalletChain(switchChainAsync, walletChainId, targetId)
+      writeContract({
+        address: target.market,
+        abi: MARKET_ABI,
+        functionName: 'requestSportsResult',
+        args: [BigInt(market.market_id)],
+        chainId: targetId,
+      })
+    } catch (e) {
+      setErr(e.shortMessage || e.message || 'Request failed')
+      setBusy(null)
+    }
+  }
+
   async function submitResult(outcome) {
     setBusy(outcome)
     setErr(null)
@@ -105,6 +123,23 @@ function ResolveCard({ market }) {
       </div>
 
       <p className="admin-resolve-label">Set result → resolves on-chain instantly</p>
+      {target?.hasSportsOracle ? (
+        <>
+          <p className="admin-resolve-label">Request Chainlink result, or set it yourself</p>
+          <div className="admin-resolve-btns" style={{ marginBottom: '0.75rem' }}>
+            <button
+              className={`admin-btn draw${busy === 'cl' ? ' loading' : ''}`}
+              onClick={requestChainlink}
+              disabled={isBusy}
+            >
+              {busy === 'cl' && isConfirming ? 'Confirming...' : busy === 'cl' && isPending ? 'Sign...' : 'Request Chainlink result'}
+            </button>
+          </div>
+          <p className="admin-resolve-label">Owner fallback</p>
+        </>
+      ) : (
+        <p className="admin-resolve-label">Set the official full-time result</p>
+      )}
       <div className="admin-resolve-btns">
         <button
           className={`admin-btn team-a${busy === 1 ? ' loading' : ''}`}

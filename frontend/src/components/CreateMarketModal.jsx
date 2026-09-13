@@ -117,6 +117,7 @@ export function CreateMarketModal({ onClose }) {
   const [teamB,       setTeamB]       = useState('')
   const [competition, setCompetition] = useState('FIFA World Cup 2026')
   const [sportsDur,   setSportsDur]   = useState(SPORTS_DURATIONS[0])
+  const [fixtureId,   setFixtureId]   = useState('')
 
   const isOwner  = address?.toLowerCase() === CONTRACT_OWNER.toLowerCase()
   const isSports = marketType === 'sports' && isOwner
@@ -146,7 +147,11 @@ export function CreateMarketModal({ onClose }) {
   })
 
   const validAmount = parseFloat(amount) >= 1 && amountRaw > 0n
+  const fixtureNum = Number(fixtureId)
+  const validFixture = Number.isInteger(fixtureNum) && fixtureNum > 0
+  const needsOnchainFixture = !!target?.hasSportsOracle
   const validSports = isSports && teamA.trim().length > 0 && teamB.trim().length > 0 && !!direction
+    && (!needsOnchainFixture || validFixture)
   const canSubmit   = validAmount && (isSports ? validSports : !!direction)
   const needsApproval = allowance < amountRaw
   const isBusy      = phase === PHASES.APPROVING || phase === PHASES.CREATING
@@ -184,27 +189,39 @@ export function CreateMarketModal({ onClose }) {
 
       setPhase(PHASES.CREATING)
 
-      let question, durationSecs, marketTypeInt, oracle
+      let question, durationSecs
+      let hash
       if (isSports) {
         const comp = competition.trim() || 'FIFA World Cup 2026'
-        question     = `${teamA.trim()} vs ${teamB.trim()} | ${comp}`
+        const fdSuffix = validFixture ? ` | fd:${fixtureNum}` : ''
+        question = `${teamA.trim()} vs ${teamB.trim()} | ${comp}${fdSuffix}`
         durationSecs = BigInt(sportsDur.secs)
-        marketTypeInt = 1
-        oracle        = ZERO_ADDRESS
+        if (target.hasSportsOracle) {
+          hash = await writeContractAsync({
+            address: target.market, abi: MARKET_ABI,
+            functionName: 'createSportsMarket',
+            args: [question, durationSecs, direction, amountRaw, BigInt(fixtureNum)],
+            chainId: targetId,
+          })
+        } else {
+          hash = await writeContractAsync({
+            address: target.market, abi: MARKET_ABI,
+            functionName: 'createMarket',
+            args: [1, question, durationSecs, direction, amountRaw, ZERO_ADDRESS],
+            chainId: targetId,
+          })
+        }
       } else {
         const dirLabel = direction === OPTION.UP ? 'UP' : 'DOWN'
-        question     = `BTC ${dirLabel} in ${duration.label} — ${new Date().toISOString()}`
+        question = `BTC ${dirLabel} in ${duration.label} — ${new Date().toISOString()}`
         durationSecs = BigInt(duration.secs)
-        marketTypeInt = 0
-        oracle        = target.btcOracle
+        hash = await writeContractAsync({
+          address: target.market, abi: MARKET_ABI,
+          functionName: 'createMarket',
+          args: [0, question, durationSecs, direction, amountRaw, target.btcOracle],
+          chainId: targetId,
+        })
       }
-
-      const hash = await writeContractAsync({
-        address: target.market, abi: MARKET_ABI,
-        functionName: 'createMarket',
-        args: [marketTypeInt, question, durationSecs, direction, amountRaw, oracle],
-        chainId: targetId,
-      })
       await publicClient.waitForTransactionReceipt({ hash })
       setPhase(PHASES.DONE)
       // Close modal after brief success flash
@@ -291,6 +308,18 @@ export function CreateMarketModal({ onClose }) {
               onChange={(e) => setCompetition(e.target.value)}
               disabled={isBusy || isDone}
             />
+
+            <p className="field-label">football-data.org fixture id</p>
+            <input
+              className="competition-input"
+              placeholder="e.g. 327863"
+              value={fixtureId}
+              onChange={(e) => setFixtureId(e.target.value.replace(/\D/g, ''))}
+              disabled={isBusy || isDone}
+            />
+            <p className="tx-hint">
+              Required for Chainlink settle. Team A must be the home side of this fixture.
+            </p>
 
             <p className="field-label">Your pick</p>
             <TeamSideSelector

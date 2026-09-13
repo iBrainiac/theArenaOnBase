@@ -1,7 +1,7 @@
 export { getChainConfig, CHAINS, CONTRACT_OWNER, BASE_SEPOLIA_ID, ARC_TESTNET_ID } from './chains'
 
 /** @deprecated Use getChainConfig(chainId).market — Base Sepolia fallback */
-export const MARKET_ADDRESS    = import.meta.env.VITE_MARKET_CONTRACT  || '0x878819e7BdEF8E39D782d51870F51b7AEE137329'
+export const MARKET_ADDRESS    = import.meta.env.VITE_MARKET_CONTRACT  || '0x20FB4e706365FeF2Dd22Ddcd15987E695F6f637E'
 /** @deprecated Use getChainConfig(chainId).usdc */
 export const USDC_ADDRESS      = import.meta.env.VITE_USDC_ADDRESS      || '0x036CbD53842c5426634e7929541eC2318f3dCF7e'
 export const CHAINLINK_BTC_USD = '0x0FB99723Aee6f420beAD13e6bBB79b7E6F034298'
@@ -103,6 +103,26 @@ export const MARKET_ABI = [
   },
   {
     name: 'refund',
+    type: 'function',
+    inputs: [{ name: 'marketId', type: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    name: 'createSportsMarket',
+    type: 'function',
+    inputs: [
+      { name: 'question',  type: 'string'  },
+      { name: 'duration',  type: 'uint256' },
+      { name: 'option',    type: 'uint8'   },
+      { name: 'amount',    type: 'uint256' },
+      { name: 'fixtureId', type: 'uint256' },
+    ],
+    outputs: [{ name: 'marketId', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    name: 'requestSportsResult',
     type: 'function',
     inputs: [{ name: 'marketId', type: 'uint256' }],
     outputs: [],
